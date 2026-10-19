@@ -521,14 +521,18 @@ export default function App() {
 
     if (shiftingFilter === 'Fresh') {
       matchesTimeline = follow.includes('just') || follow.includes('min') || follow.includes('hr');
-    } else if (shiftingFilter === 'Immediate') {
-      matchesTimeline = shift.includes('now') || shift.includes('immediate');
-    } else if (shiftingFilter === '7 Days') {
-      matchesTimeline = shift.includes('7 day') || shift.includes('week');
     } else if (shiftingFilter === 'This Month') {
-      matchesTimeline = shift.includes('nov') || shift.includes('this month') || shift.includes('now') || shift.includes('7 day');
+      matchesTimeline = shift.includes('nov') || shift.includes('this month') || shift.includes('now') || shift.includes('immediate') || shift.includes('7 day');
     } else if (shiftingFilter === 'Next Month') {
       matchesTimeline = shift.includes('dec') || shift.includes('next month') || shift.includes('future');
+    } else if (shiftingFilter === 'DirectCall') {
+      // Direct Call Leads (only name & phone, missing BHK/budget/locality)
+      const isDirectCall = !lead.bhk || !lead.budget || lead.bhk === 'Flat' || !lead.location || lead.location === 'Kolkata';
+      matchesTimeline = isDirectCall;
+    } else if (shiftingFilter === 'WhatsApp') {
+      // WhatsApp Leads (full detailed inquiries)
+      const isWhatsApp = !!(lead.bhk && lead.bhk !== 'Flat' && lead.budget && lead.location);
+      matchesTimeline = isWhatsApp;
     }
 
     // Locality quick filter logic (Shapoorji, Newtown, Others)
@@ -889,13 +893,14 @@ export default function App() {
               }`} />
             </div>
 
-            {/* Timeline Filter Pills (Removed 'Moving Now') */}
+            {/* Filter Pills */}
             {[
               { id: 'All', label: 'All Dates' },
               { id: 'Fresh', label: '⚡ Fresh Inquiries' },
-              { id: '7 Days', label: '🗓️ Within 7 Days' },
               { id: 'This Month', label: '📅 This Month' },
-              { id: 'Next Month', label: '🔮 Next Month' }
+              { id: 'Next Month', label: '🔮 Next Month' },
+              { id: 'DirectCall', label: '📞 Direct Call Leads' },
+              { id: 'WhatsApp', label: '💬 WhatsApp Leads' }
             ].map(pill => {
               const active = shiftingFilter === pill.id;
               return (
@@ -1039,6 +1044,14 @@ export default function App() {
                               <span>HOT LEAD</span>
                             </span>
                           ) : null}
+
+                          {/* DIRECT CALL LEAD BADGE (Phone & Name only) */}
+                          {(!lead.bhk || !lead.budget || lead.bhk === 'Flat' || !lead.location || lead.location === 'Kolkata') && !isClosed && (
+                            <span className="bg-blue-600/90 text-white px-2 py-0.5 rounded-full font-extrabold text-[9px] tracking-wide shadow-xs flex items-center space-x-1 border border-blue-400/30">
+                              <Phone className="w-2.5 h-2.5" />
+                              <span>DIRECT CALL</span>
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center space-x-2 mt-1 text-[10px]">
