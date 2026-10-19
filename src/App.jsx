@@ -614,39 +614,39 @@ export default function App() {
           <div className="absolute top-0 right-1/4 w-72 h-36 bg-[#FFC800]/15 rounded-full blur-3xl pointer-events-none"></div>
 
           {/* Top Bar: Brand + Controls */}
-          <div className="relative z-10 flex items-center justify-between mb-3">
+          <div className="relative z-10 flex items-center justify-between mb-2.5">
             {/* Brand Logo & Title */}
-            <div className="flex items-center space-x-3">
-              <div className="relative group cursor-pointer">
+            <div className="flex items-center space-x-2.5 min-w-0">
+              {/* Perfectly Circular Logo with yellow border & subtle glow */}
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-[#FFC800] p-[2px] shadow-[0_2px_14px_rgba(255,200,0,0.35)] flex-shrink-0">
                 <img 
                   src="/flatzy-logo.jpg" 
-                  alt="Flatzy Logo" 
-                  className="w-12 h-12 rounded-full object-cover shadow-[0_4px_22px_rgba(255,200,0,0.45)] ring-2 ring-[#FFC800]/50 transform group-hover:scale-105 transition-all duration-200" 
+                  alt="Flatzy" 
+                  className="w-full h-full rounded-full object-cover" 
                 />
               </div>
 
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="font-extrabold text-2xl text-white tracking-tight leading-none font-sans drop-shadow-sm">
-                    Flatzy
-                  </span>
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-white/[0.12] text-[#FFC800] border border-[#FFC800]/30 backdrop-blur-md">
-                    PORTAL
-                  </span>
-                </div>
+              {/* Title & Portal Badge */}
+              <div className="flex items-center space-x-2 truncate">
+                <span className="font-black text-xl sm:text-2xl text-white tracking-tight leading-none drop-shadow-sm">
+                  Flatzy
+                </span>
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-400/20 text-[#FFC800] border border-[#FFC800]/40 backdrop-blur-md">
+                  PORTAL
+                </span>
               </div>
             </div>
 
             {/* Right Controls: Help Guide, Theme Toggle & Add Lead Button */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
               {/* ❓ Help / Guide Button */}
               <button 
                 onClick={() => setShowHelpModal(true)}
                 title="Kaise use karein? (Help Guide)"
                 aria-label="Help Guide"
-                className="w-10 h-10 rounded-2xl bg-black/40 hover:bg-black/60 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md relative group shadow-sm text-[#FFC800] hover:text-white"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/15 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md text-[#FFC800] hover:text-white shadow-xs"
               >
-                <HelpCircle className="w-4 h-4 stroke-[2.5] group-hover:scale-110 transition-transform duration-200" />
+                <HelpCircle className="w-4 h-4 stroke-[2.5]" />
               </button>
 
               {/* Theme Toggle Button */}
@@ -654,28 +654,28 @@ export default function App() {
                 onClick={toggleTheme}
                 title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
                 aria-label="Toggle Theme"
-                className="w-10 h-10 rounded-2xl bg-black/40 hover:bg-black/60 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md relative group shadow-sm"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/15 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md text-slate-200 hover:text-white shadow-xs"
               >
                 {isDark ? (
-                  <Sun className="w-4 h-4 text-[#FFC800] group-hover:rotate-45 transition-transform duration-300" />
+                  <Sun className="w-4 h-4 text-[#FFC800]" />
                 ) : (
-                  <Moon className="w-4 h-4 text-slate-200 group-hover:-rotate-12 transition-transform duration-300" />
+                  <Moon className="w-4 h-4 text-slate-200" />
                 )}
               </button>
 
               {/* Primary + Add Lead Button */}
               <button 
                 onClick={() => setShowChoiceModal(true)}
-                className="group relative overflow-hidden bg-gradient-to-r from-[#FFC800] via-[#FFD21A] to-[#FFAE00] hover:brightness-105 active:scale-[0.96] text-[#0B132B] px-4 py-2.5 rounded-2xl text-xs font-black flex items-center space-x-1.5 shadow-[0_4px_22px_rgba(255,200,0,0.4)] transition-all"
+                className="group relative overflow-hidden bg-gradient-to-r from-[#FFC800] via-[#FFD21A] to-[#FFAE00] hover:brightness-105 active:scale-95 text-[#0B132B] px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-black flex items-center space-x-1 sm:space-x-1.5 shadow-[0_4px_16px_rgba(255,200,0,0.35)] transition-all cursor-pointer"
               >
-                <Plus className="w-4 h-4 stroke-[3] group-hover:rotate-90 transition-transform duration-200" />
-                <span className="tracking-tight text-xs font-black">Add Inquiry</span>
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                <span className="tracking-tight text-xs font-black whitespace-nowrap">Add Inquiry</span>
               </button>
             </div>
           </div>
 
-          {/* Subtitle Message matching screenshot */}
-          <p className="relative z-10 text-[11px] text-slate-300/90 font-medium max-w-sm mt-1 mb-3.5 leading-relaxed drop-shadow-xs">
+          {/* Subtitle Message */}
+          <p className="relative z-10 text-[11px] text-slate-300 font-medium max-w-sm mt-0.5 mb-3 leading-relaxed drop-shadow-xs">
             Manage your rental inquiries, bookings and leads — all in one place.
           </p>
 
@@ -1330,13 +1330,13 @@ export default function App() {
           isDark ? 'bg-[#1E293B] border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500 shadow-sm'
         }`}>
           <div className="flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}></span>
-            <span className={`text-[11px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-              {isSupabaseConfigured ? '🟢 Live Cloud Sync (Supabase Realtime)' : '💾 Local Storage Mode (Offline Safe)'}
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.7)]"></span>
+            <span className={`text-[11px] font-bold ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+              Connected to Supabase (Realtime Sync)
             </span>
           </div>
           <span className={`text-[11px] font-bold ${isDark ? 'text-[#FFC800]' : 'text-[#0B132B]'}`}>
-            {filteredLeads.length} of {leads.length} inquiries {totalPages > 1 && `(Page ${validCurrentPage} of ${totalPages})`}
+            {filteredLeads.length} {filteredLeads.length === 1 ? 'inquiry' : 'inquiries'} {totalPages > 1 && `(Page ${validCurrentPage} of ${totalPages})`}
           </span>
         </footer>
 
