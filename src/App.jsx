@@ -129,7 +129,11 @@ export default function App() {
 
   // Fetch leads from Supabase table
   const fetchSupabaseLeads = async (showToastNotice = false) => {
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured || !supabase) {
+      console.warn("⚠️ Supabase is not configured on this client instance.");
+      if (showToastNotice) showToast("⚠️ Supabase credentials not found in env");
+      return;
+    }
     setIsSyncing(true);
     try {
       const { data, error } = await supabase
@@ -138,12 +142,12 @@ export default function App() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.warn("Supabase fetch error:", error);
-        if (showToastNotice) showToast("⚠️ Cloud sync failed. Check connection.");
+        console.error("Supabase fetch error:", error);
+        if (showToastNotice) showToast("⚠️ Cloud sync failed: " + (error.message || 'Check connection'));
         return;
       }
 
-      if (data && data.length > 0) {
+      if (data) {
         const mapped = data.map(row => ({
           id: row.id,
           name: row.name,
@@ -162,11 +166,10 @@ export default function App() {
         }));
         setLeads(mapped);
         if (showToastNotice) showToast(`Synced ${mapped.length} inquiries from cloud`);
-      } else if (showToastNotice) {
-        showToast("Database is up to date (0 inquiries)");
       }
     } catch (err) {
-      console.warn("Supabase initial load failed:", err);
+      console.error("Supabase load exception:", err);
+      if (showToastNotice) showToast("⚠️ Sync error: " + err.message);
     } finally {
       setIsSyncing(false);
     }
