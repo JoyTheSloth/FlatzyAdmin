@@ -421,6 +421,13 @@ export default function App() {
     }
   };
 
+  // Close AI Modal and reset state
+  const handleCloseAiModal = () => {
+    setShowAiModal(false);
+    setAiRawInput('');
+    setAiParsedLead(null);
+  };
+
   // Save AI Lead
   const handleSaveAiLead = () => {
     if (!aiParsedLead) return;
@@ -1598,7 +1605,7 @@ export default function App() {
         {/* 2. AI PARSER DIALOG: Clean Theme & Simple Layman Terms */}
         {showAiModal && (
           <div 
-            onClick={() => setShowAiModal(false)}
+            onClick={handleCloseAiModal}
             className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto"
           >
             <div 
@@ -1622,7 +1629,7 @@ export default function App() {
                   </div>
                 </div>
                 <button 
-                  onClick={() => setShowAiModal(false)}
+                  onClick={handleCloseAiModal}
                   className={`w-7 h-7 rounded-full flex items-center justify-center active:scale-90 transition-transform ${
                     isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
