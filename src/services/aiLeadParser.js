@@ -118,9 +118,21 @@ function parseWithRegexFallback(rawText) {
     }
   }
 
-  // Check 2: Single budget with keyword (e.g. "budget 9.5", "rent is 15k", "budget: 12000")
+  // Check 1b: Budget with Under / Below / Upto (e.g. "Budget: Under ₹10,000", "Under 12k", "upto 15000")
   if (!budget) {
-    const singleKeywordRegex = /(?:budget|rent|approx|around|within|rs\.?|inr|₹)[\s*:=-]*(\d+(?:\.\d+)?)\s*k?\b/i;
+    const underRegex = /(?:budget|rent)?[\s*:=-]*(?:under|below|upto|up\s*to|max|less\s*than)\s*(?:rs\.?|inr|₹)?\s*(\d+(?:\.\d+)?)\s*k?\b/i;
+    const underMatch = budgetSearchText.match(underRegex);
+    if (underMatch) {
+      const amt = formatAmount(underMatch[1]);
+      if (amt) {
+        budget = `Under ${amt}`;
+      }
+    }
+  }
+
+  // Check 2: Single budget with keyword (e.g. "budget 9.5", "rent is 15k", "budget: 12000", "budget around 10000")
+  if (!budget) {
+    const singleKeywordRegex = /(?:budget|rent|approx|around|within|rs\.?|inr|₹)[\s*:=-]*(?:around|approx|is|of)?\s*(?:rs\.?|inr|₹)?\s*(\d+(?:\.\d+)?)\s*k?\b/i;
     const singleMatch = budgetSearchText.match(singleKeywordRegex);
     if (singleMatch) {
       budget = formatAmount(singleMatch[1]) || "";
