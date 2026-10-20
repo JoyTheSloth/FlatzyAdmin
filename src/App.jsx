@@ -172,7 +172,7 @@ export default function App() {
     }
   };
 
-  // Live Supabase Database Sync (Realtime)
+  // Live Supabase Database Sync (Realtime + Periodic Poll Fallback)
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) return;
 
@@ -180,13 +180,32 @@ export default function App() {
     fetchSupabaseLeads();
 
     // 2. Realtime WebSocket listener across all team phones/browsers
+    const channelName = `realtime_inquiries_${Date.now()}`;
     const channel = supabase
-      .channel('public:inquiries')
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inquiries' }, (payload) => {
         if (payload.eventType === 'INSERT') {
           const row = payload.new;
           setLeads(prev => {
-            if (prev.some(l => l.id === row.id)) return prev;
+            const exists = prev.some(l => l.id === row.id);
+            if (exists) {
+              return prev.map(l => l.id === row.id ? {
+                ...l,
+                name: row.name || l.name,
+                phone: row.phone || l.phone,
+                bhk: row.bhk || l.bhk,
+                property: row.property || l.property,
+                location: row.location || l.location,
+                furnishing: row.furnishing || l.furnishing,
+                budget: row.budget || l.budget,
+                shiftingDate: row.shifting_date || l.shiftingDate,
+                tenantType: row.tenant_type || l.tenantType,
+                status: row.status || l.status,
+                isHot: row.is_hot !== undefined ? row.is_hot : l.isHot,
+                isClosed: row.is_closed !== undefined ? row.is_closed : l.isClosed,
+                lastFollowUp: row.last_follow_up || l.lastFollowUp
+              } : l);
+            }
             return [{
               id: row.id,
               name: row.name,
@@ -218,16 +237,29 @@ export default function App() {
             tenantType: row.tenant_type,
             status: row.status,
             isHot: row.is_hot,
-            isClosed: row.is_closed
+            isClosed: row.is_closed,
+            lastFollowUp: row.last_follow_up || l.lastFollowUp
           } : l));
         } else if (payload.eventType === 'DELETE') {
           const oldRow = payload.old;
           setLeads(prev => prev.filter(l => l.id !== oldRow.id));
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Supabase Realtime connected');
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          console.warn('⚠️ Realtime channel warning, fallback polling active:', status);
+        }
+      });
+
+    // 3. Fallback sync poll every 10 seconds to ensure multi-device sync even if mobile WebSocket drops
+    const pollInterval = setInterval(() => {
+      fetchSupabaseLeads(false);
+    }, 10000);
 
     return () => {
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -702,12 +734,12 @@ export default function App() {
           <div className="absolute inset-0 bg-gradient-to-b from-[#080E21]/80 via-[#0B1530]/60 to-[#080E21]/95"></div>
           <div className="absolute top-0 right-1/4 w-72 h-36 bg-[#FFC800]/15 rounded-full blur-3xl pointer-events-none"></div>
 
-          {/* Top Bar: Brand + Controls */}
-          <div className="relative z-10 flex items-center justify-between mb-2.5">
+          {/* Top Bar: Brand + Controls (Clean, roomy, non-colliding layout) */}
+          <div className="relative z-10 flex flex-wrap items-center justify-between gap-y-3 gap-x-2 mb-3">
             {/* Brand Logo & Title */}
             <div className="flex items-center space-x-2.5 min-w-0">
               {/* Perfectly Circular Logo with yellow border & subtle glow */}
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden bg-[#FFC800] p-[2px] shadow-[0_2px_14px_rgba(255,200,0,0.35)] flex-shrink-0">
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-[#FFC800] p-[2px] shadow-[0_2px_14px_rgba(255,200,0,0.35)] flex-shrink-0">
                 <img 
                   src="/flatzy-logo.jpg" 
                   alt="Flatzy" 
@@ -716,24 +748,24 @@ export default function App() {
               </div>
 
               {/* Title & Portal Badge */}
-              <div className="flex items-center space-x-2 truncate">
+              <div className="flex items-center space-x-2">
                 <span className="font-black text-xl sm:text-2xl text-white tracking-tight leading-none drop-shadow-sm">
                   Flatzy
                 </span>
-                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-400/20 text-[#FFC800] border border-[#FFC800]/40 backdrop-blur-md">
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-400/20 text-[#FFC800] border border-[#FFC800]/40 backdrop-blur-md">
                   PORTAL
                 </span>
               </div>
             </div>
 
-            {/* Right Controls: Help Guide, Theme Toggle & Add Lead Button */}
-            <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
+            {/* Right Controls: Help Guide, Cloud Sync, Theme Toggle & Add Lead Button */}
+            <div className="flex items-center space-x-1.5 sm:space-x-2">
               {/* ❓ Help / Guide Button */}
               <button 
                 onClick={() => setShowHelpModal(true)}
                 title="Kaise use karein? (Help Guide)"
                 aria-label="Help Guide"
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/15 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md text-[#FFC800] hover:text-white shadow-xs"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 hover:bg-white/15 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md text-[#FFC800] hover:text-white shadow-xs"
               >
                 <HelpCircle className="w-4 h-4 stroke-[2.5]" />
               </button>
@@ -744,12 +776,12 @@ export default function App() {
                 disabled={isSyncing}
                 title="Sync with Cloud Database (Supabase)"
                 aria-label="Sync with Database"
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/15 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md text-slate-200 hover:text-white shadow-xs relative ${
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 hover:bg-white/15 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md text-slate-200 hover:text-white shadow-xs relative ${
                   isSyncing ? 'opacity-70 cursor-wait' : 'cursor-pointer'
                 }`}
               >
-                <RefreshCw className={`w-4 h-4 text-emerald-400 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-[#0B1530]"></span>
+                <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-[#0B1530]"></span>
               </button>
 
               {/* Theme Toggle Button */}
@@ -757,22 +789,22 @@ export default function App() {
                 onClick={toggleTheme}
                 title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
                 aria-label="Toggle Theme"
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/15 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md text-slate-200 hover:text-white shadow-xs"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 hover:bg-white/15 active:scale-90 flex items-center justify-center transition-all duration-200 border border-white/15 backdrop-blur-md text-slate-200 hover:text-white shadow-xs"
               >
                 {isDark ? (
-                  <Sun className="w-4 h-4 text-[#FFC800]" />
+                  <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#FFC800]" />
                 ) : (
-                  <Moon className="w-4 h-4 text-slate-200" />
+                  <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-200" />
                 )}
               </button>
 
               {/* Primary + Add Lead Button */}
               <button 
                 onClick={() => setShowChoiceModal(true)}
-                className="group relative overflow-hidden bg-gradient-to-r from-[#FFC800] via-[#FFD21A] to-[#FFAE00] hover:brightness-105 active:scale-95 text-[#0B132B] px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-black flex items-center space-x-1 sm:space-x-1.5 shadow-[0_4px_16px_rgba(255,200,0,0.35)] transition-all cursor-pointer"
+                className="group relative overflow-hidden bg-gradient-to-r from-[#FFC800] via-[#FFD21A] to-[#FFAE00] hover:brightness-105 active:scale-95 text-[#0B132B] px-3 py-1.5 sm:py-2 rounded-xl text-xs font-black flex items-center space-x-1 shadow-[0_4px_16px_rgba(255,200,0,0.35)] transition-all cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                <span className="tracking-tight text-xs font-black whitespace-nowrap">Add Inquiry</span>
+                <span className="tracking-tight text-[11px] sm:text-xs font-black whitespace-nowrap">Add</span>
               </button>
             </div>
           </div>
