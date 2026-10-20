@@ -53,9 +53,10 @@ function cleanAndParseJSON(content) {
 function parseWithRegexFallback(rawText) {
   const text = rawText || "";
   
-  // Phone: 10-digit Indian phone with optional +91
-  const phoneMatch = text.match(/(?:\+91[\s-]?)?[6-9]\d{9}/);
-  const phone = phoneMatch ? phoneMatch[0] : "";
+  // Phone: Indian phone with optional +91 and spaces/hyphens (e.g. +91 80133 58899, 98300 12345, 9830012345)
+  const phoneRegex = /(?:\+91[\s-]?)?[6-9](?:[\s-]?\d){9}/;
+  const phoneMatch = text.match(phoneRegex);
+  const phone = phoneMatch ? phoneMatch[0].trim().replace(/\s+/g, " ") : "";
 
   // BHK: 1bhk, 2 bhk, 3-bhk, etc.
   const bhkMatch = text.match(/\b([1-4])\s*[-]?\s*bhk\b/i);
@@ -69,12 +70,12 @@ function parseWithRegexFallback(rawText) {
     tenantType = "Family";
   }
 
-  // Locality
+  // Locality (includes sec 5, sector v, chinar park, newtown, etc.)
   let location = "";
   if (/shapoorji/i.test(text)) location = "Shapoorji";
+  else if (/salt\s*lake|sector\s*[1-5]|sec\s*[1-5]|sector\s*v|sec\s*v/i.test(text)) location = "Salt Lake";
   else if (/new\s*town|newtown|action\s*area/i.test(text)) location = "New Town";
-  else if (/salt\s*lake|sector\s*[1-5]/i.test(text)) location = "Salt Lake";
-  else if (/rajarhat|chinar\s*park/i.test(text)) location = "Rajarhat";
+  else if (/rajarhat|chinar\s*park|chinarpark/i.test(text)) location = "Rajarhat";
   else if (/garia|patuli/i.test(text)) location = "Garia";
   else if (/dum\s*dum|nagerbazar/i.test(text)) location = "Dum Dum";
   else if (/behala/i.test(text)) location = "Behala";
@@ -87,28 +88,29 @@ function parseWithRegexFallback(rawText) {
   else if (/unfurnished|bare/i.test(text)) furnishing = "Unfurnished";
 
   // --- Smart Budget Extraction ---
-  // Step 1: Strip phone numbers and BHK from text copy so digits don't collide
-  let budgetSearchText = text.replace(/(?:\+91[\s-]?)?[6-9]\d{9}/g, ' ');
-  budgetSearchText = budgetSearchText.replace(/\b[1-5]\s*[-]?\s*bhk\b/gi, ' ');
+  // Step 1: Strip phone numbers and BHK, and remove commas inside numbers (e.g. 10,000 -> 10000)
+  let budgetSearchText = text.replace(/(?:\+91[\s-]?)?[6-9](?:[\s-]?\d){9}/g, " ");
+  budgetSearchText = budgetSearchText.replace(/\b[1-5]\s*[-]?\s*bhk\b/gi, " ");
+  budgetSearchText = budgetSearchText.replace(/(\d),(\d)/g, "$1$2");
 
   // Helper to format numeric string to ₹X,XXX
   const formatAmount = (valStr) => {
     let num = parseFloat(valStr);
     if (isNaN(num)) return null;
-    // Numbers < 100 in budget context (e.g. 9.5, 9, 10, 15) mean thousands (9,500, 9,000, etc.)
+    // Numbers < 100 in budget context (e.g. 9.5, 9, 10, 12, 14, 15) mean thousands
     if (num < 100) {
       num = Math.round(num * 1000);
     }
-    return '₹' + num.toLocaleString('en-IN');
+    return "₹" + num.toLocaleString("en-IN");
   };
 
   let budget = "";
 
-  // Check 1: Budget Range (e.g. "budget is around 10 to 15", "10-15k", "9.5 to 12k", "15000 - 20000")
-  const rangeRegex = /(?:(?:budget|rent|approx|around|within|between|rs\.?|inr|₹)\s*(?:is|of)?\s*)?(\d+(?:\.\d+)?)\s*k?\s*(?:-|to|–|and)\s*(\d+(?:\.\d+)?)\s*k?/i;
+  // Check 1: Budget Range (e.g. "budget - 12k-14k", "budget: 10 to 15", "10-15k", "₹10,000 - ₹15,000")
+  const rangeRegex = /(?:(?:budget|rent|approx|around|within|between|rs\.?|inr|₹)[\s*:=-]*)*(\d+(?:\.\d+)?)\s*k?\s*(?:-|to|–|and)\s*(?:rs\.?|inr|₹)?\s*(\d+(?:\.\d+)?)\s*k?/i;
   const rangeMatch = budgetSearchText.match(rangeRegex);
   
-  if (rangeMatch && (rangeMatch[0].match(/budget|rent|approx|around|within|between|rs|inr|₹|k/i) || text.includes('to') || text.includes('-'))) {
+  if (rangeMatch && (rangeMatch[0].match(/budget|rent|approx|around|within|between|rs|inr|₹|k/i) || text.includes("to") || text.includes("-"))) {
     const minVal = formatAmount(rangeMatch[1]);
     const maxVal = formatAmount(rangeMatch[2]);
     if (minVal && maxVal) {
@@ -118,7 +120,7 @@ function parseWithRegexFallback(rawText) {
 
   // Check 2: Single budget with keyword (e.g. "budget 9.5", "rent is 15k", "budget: 12000")
   if (!budget) {
-    const singleKeywordRegex = /(?:budget|rent|approx|around|within|rs\.?|inr|₹)\s*(?:is|of|:)?\s*(\d+(?:\.\d+)?)\s*k?\b/i;
+    const singleKeywordRegex = /(?:budget|rent|approx|around|within|rs\.?|inr|₹)[\s*:=-]*(\d+(?:\.\d+)?)\s*k?\b/i;
     const singleMatch = budgetSearchText.match(singleKeywordRegex);
     if (singleMatch) {
       budget = formatAmount(singleMatch[1]) || "";
@@ -148,15 +150,23 @@ function parseWithRegexFallback(rawText) {
   else if (/next\s*month|dec/i.test(text)) shiftingDate = "Next Month";
   else if (/nov/i.test(text)) shiftingDate = "Nov";
 
-  // Name heuristic: handles WhatsApp templates (*Name:*, • Name:, Name:), "I am [Name]", "This is [Name]", or first capitalized word
+  // Name heuristic: handles WhatsApp templates (*Name:*, • Name:), Call note: [Name], "I am [Name]", first line "Shafiq (55yrs)"
   let name = "Caller Inquiry";
-  const nameMatch = text.match(/(?:i\s+am|this\s+is|[•\-*]*\s*name\s*[*:]*[:=-]?\s*[*:]*|caller\s*[:=-])\s*([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
+  const nameMatch = text.match(/(?:call\s*note\s*[:=-]|i\s+am|this\s+is|[•\-*]*\s*name\s*[*:]*[:=-]?\s*[*:]*|caller\s*[:=-])\s*([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
   if (nameMatch) {
     name = nameMatch[1].trim();
   } else {
-    const firstWord = text.trim().split(/\s+/)[0];
-    if (firstWord && /^[A-Z][a-z]{2,15}$/.test(firstWord)) {
-      name = firstWord;
+    // Check first line: e.g. "Shafiq (55yrs)" or "Soumya Mukherjee"
+    const firstLine = text.trim().split("\n")[0].trim();
+    // Split on parentheses, brackets, hyphens, colons, or commas
+    const nameCandidate = firstLine.split(/[\(\[\-:,]/)[0].replace(/\d+\s*(?:yrs|yr|years|age)/gi, "").trim();
+    if (nameCandidate && /^[A-Za-z]+(?:\s+[A-Za-z]+)*$/.test(nameCandidate) && nameCandidate.length >= 2 && nameCandidate.length <= 30) {
+      name = nameCandidate;
+    } else {
+      const firstWord = text.trim().split(/\s+/)[0];
+      if (firstWord && /^[A-Z][a-z]{2,15}$/.test(firstWord)) {
+        name = firstWord;
+      }
     }
   }
 
