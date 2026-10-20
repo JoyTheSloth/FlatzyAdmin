@@ -148,11 +148,11 @@ function parseWithRegexFallback(rawText) {
   else if (/next\s*month|dec/i.test(text)) shiftingDate = "Next Month";
   else if (/nov/i.test(text)) shiftingDate = "Nov";
 
-  // Name heuristic: look for "I am [Name]" or "Name: [Name]" or first capitalized word
+  // Name heuristic: handles WhatsApp templates (*Name:*, • Name:, Name:), "I am [Name]", "This is [Name]", or first capitalized word
   let name = "Caller Inquiry";
-  const nameMatch = text.match(/(?:i am|this is|name\s*[:=-]|caller\s*[:=-])\s*([A-Za-z]{2,20})/i);
+  const nameMatch = text.match(/(?:i\s+am|this\s+is|[•\-*]*\s*name\s*[*:]*[:=-]?\s*[*:]*|caller\s*[:=-])\s*([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
   if (nameMatch) {
-    name = nameMatch[1];
+    name = nameMatch[1].trim();
   } else {
     const firstWord = text.trim().split(/\s+/)[0];
     if (firstWord && /^[A-Z][a-z]{2,15}$/.test(firstWord)) {
