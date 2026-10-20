@@ -10,6 +10,20 @@ const MISTRAL_API_KEY = import.meta.env.VITE_MISTRAL_API_KEY || "";
 const SYSTEM_PROMPT = `You are an expert real estate lead parsing assistant for "Flatzy" in Kolkata.
 Analyze the user's messy text, WhatsApp message, call notes, or transcribed audio and extract lead requirements into clean JSON.
 
+IMPORTANT BUDGET PARSING RULES:
+- If a shorthand number with 'k' is given, convert it to full rupees:
+  * "9k" -> "₹9,000"
+  * "9.5k" -> "₹9,500"
+  * "12k" -> "₹12,000"
+- If a small number (under 100) is given in the context of budget or rent (e.g. "budget 9.5", "rent 10", "budget 8.5"), interpret it as thousands in Indian Rupees:
+  * "budget 9.5" -> "₹9,500"
+  * "rent 12" -> "₹12,000"
+  * "budget 8.5" -> "₹8,500"
+- If a range is given (e.g. "10 to 15", "10-15k", "10k to 15k", "around 10 to 15"), format it cleanly as a range:
+  * "10 to 15" or "10-15" or "10k-15k" -> "₹10,000 – ₹15,000"
+  * "9.5 to 12k" -> "₹9,500 – ₹12,000"
+- Never confuse parts of phone numbers (e.g., 94343..., 98300...) with the budget!
+
 Return ONLY a valid JSON object matching this exact schema:
 {
   "name": "string (lead name, or 'Inquirer' if not mentioned)",
@@ -72,15 +86,59 @@ function parseWithRegexFallback(rawText) {
   else if (/semi\s*[-]?\s*furnished/i.test(text)) furnishing = "Semi-Furnished";
   else if (/unfurnished|bare/i.test(text)) furnishing = "Unfurnished";
 
-  // Budget: 15k, 20000, 25-30k
-  const budgetMatch = text.match(/(?:budget|rent|rs\.?|inr|₹)?\s*(\d{1,2}(?:\s*k|\s*,\s*000|\s*000)|\d{4,5})/i);
-  let budget = "";
-  if (budgetMatch) {
-    let rawBudget = budgetMatch[1].toLowerCase().replace(/\s+/g, '');
-    if (rawBudget.endsWith('k')) {
-      rawBudget = (parseInt(rawBudget) * 1000).toLocaleString('en-IN');
+  // --- Smart Budget Extraction ---
+  // Step 1: Strip phone numbers and BHK from text copy so digits don't collide
+  let budgetSearchText = text.replace(/(?:\+91[\s-]?)?[6-9]\d{9}/g, ' ');
+  budgetSearchText = budgetSearchText.replace(/\b[1-5]\s*[-]?\s*bhk\b/gi, ' ');
+
+  // Helper to format numeric string to ₹X,XXX
+  const formatAmount = (valStr) => {
+    let num = parseFloat(valStr);
+    if (isNaN(num)) return null;
+    // Numbers < 100 in budget context (e.g. 9.5, 9, 10, 15) mean thousands (9,500, 9,000, etc.)
+    if (num < 100) {
+      num = Math.round(num * 1000);
     }
-    budget = `₹${rawBudget}`;
+    return '₹' + num.toLocaleString('en-IN');
+  };
+
+  let budget = "";
+
+  // Check 1: Budget Range (e.g. "budget is around 10 to 15", "10-15k", "9.5 to 12k", "15000 - 20000")
+  const rangeRegex = /(?:(?:budget|rent|approx|around|within|between|rs\.?|inr|₹)\s*(?:is|of)?\s*)?(\d+(?:\.\d+)?)\s*k?\s*(?:-|to|–|and)\s*(\d+(?:\.\d+)?)\s*k?/i;
+  const rangeMatch = budgetSearchText.match(rangeRegex);
+  
+  if (rangeMatch && (rangeMatch[0].match(/budget|rent|approx|around|within|between|rs|inr|₹|k/i) || text.includes('to') || text.includes('-'))) {
+    const minVal = formatAmount(rangeMatch[1]);
+    const maxVal = formatAmount(rangeMatch[2]);
+    if (minVal && maxVal) {
+      budget = `${minVal} – ${maxVal}`;
+    }
+  }
+
+  // Check 2: Single budget with keyword (e.g. "budget 9.5", "rent is 15k", "budget: 12000")
+  if (!budget) {
+    const singleKeywordRegex = /(?:budget|rent|approx|around|within|rs\.?|inr|₹)\s*(?:is|of|:)?\s*(\d+(?:\.\d+)?)\s*k?\b/i;
+    const singleMatch = budgetSearchText.match(singleKeywordRegex);
+    if (singleMatch) {
+      budget = formatAmount(singleMatch[1]) || "";
+    }
+  }
+
+  // Check 3: Explicit 'k' shorthand anywhere (e.g. "9.5k", "9k", "12k")
+  if (!budget) {
+    const explicitKMatch = budgetSearchText.match(/\b(\d+(?:\.\d+)?)\s*k\b/i);
+    if (explicitKMatch) {
+      budget = formatAmount(explicitKMatch[1]) || "";
+    }
+  }
+
+  // Check 4: Standard 4 to 6 digit amount (e.g. "12000", "25000")
+  if (!budget) {
+    const stdMatch = budgetSearchText.match(/(?:budget|rent|rs\.?|inr|₹|\b)\s*(\d{4,6})\b/i);
+    if (stdMatch && parseInt(stdMatch[1]) >= 3000) {
+      budget = formatAmount(stdMatch[1]) || "";
+    }
   }
 
   // Shifting Date
