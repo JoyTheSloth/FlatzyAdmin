@@ -35,11 +35,43 @@ import {
   ChevronLeft,
   ChevronRight,
   Pencil,
-  RefreshCw
+  RefreshCw,
+  Briefcase
 } from 'lucide-react';
 import { INITIAL_LEADS, KOLKATA_LOCATIONS, FURNISHING_OPTIONS, BUDGET_OPTIONS } from './data/leadsData';
 import { parseLeadWithAI } from './services/aiLeadParser';
 import { supabase, isSupabaseConfigured } from './services/supabase';
+import RoommatesTab from './components/RoommatesTab';
+import PropertiesTab from './components/PropertiesTab';
+import BrokersTab from './components/BrokersTab';
+import BrokerDashboard from './components/BrokerDashboard';
+import AuthModal from './components/AuthModal';
+import DesktopSidebar from './components/DesktopSidebar';
+import DesktopTopBar from './components/DesktopTopBar';
+import {
+  fetchRoommatesFromCloud,
+  createRoommateInCloud,
+  updateRoommateInCloud,
+  deleteRoommateFromCloud,
+  getLocalRoommates
+} from './services/roommateAdminService';
+import {
+  fetchProperties,
+  createProperty,
+  updateProperty,
+  deleteProperty,
+  getLocalProperties
+} from './services/propertiesService';
+import {
+  fetchBrokers,
+  createBroker,
+  updateBroker,
+  deleteBroker,
+  getLocalBrokers
+} from './services/brokersService';
+import { getCurrentUser, signOutUser, DEFAULT_ADMIN_USER } from './services/authService';
+import { matchesSearchQuery } from './utils/searchUtils';
+import { formatEnquiryTimestamp, getLeadTimestamp } from './utils/dateUtils';
 
 const LOCAL_STORAGE_KEY = 'flatzy_admin_leads_v3';
 const THEME_STORAGE_KEY = 'flatzy_admin_theme_v3';
@@ -64,6 +96,14 @@ export default function App() {
     }
     return INITIAL_LEADS;
   });
+
+  const [currentUser, setCurrentUser] = useState(() => getCurrentUser() || DEFAULT_ADMIN_USER);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const [mainSection, setMainSection] = useState('inquiries'); // 'inquiries', 'roommates', 'properties', 'brokers'
+  const [roommates, setRoommates] = useState(() => getLocalRoommates());
+  const [properties, setProperties] = useState(() => getLocalProperties());
+  const [brokers, setBrokers] = useState(() => getLocalBrokers());
 
   const [activeTab, setActiveTab] = useState('all'); // 'all', 'hot', 'closed'
   const [shiftingFilter, setShiftingFilter] = useState('All'); // 'All', 'Fresh', 'Immediate', '7 Days', 'This Month', 'Next Month'
@@ -114,6 +154,11 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme);
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
     } catch (e) {
       console.error(e);
     }
@@ -127,7 +172,7 @@ export default function App() {
     }
   }, [leads]);
 
-  // Fetch leads from Supabase table
+  // Fetch leads and roommates from Supabase
   const fetchSupabaseLeads = async (showToastNotice = false) => {
     if (!isSupabaseConfigured || !supabase) {
       console.warn("⚠️ Supabase is not configured on this client instance.");
@@ -136,36 +181,60 @@ export default function App() {
     }
     setIsSyncing(true);
     try {
-      const { data, error } = await supabase
-        .from('inquiries')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [inquiriesRes, roommatesRes, propertiesRes, brokersRes] = await Promise.allSettled([
+        supabase.from('inquiries').select('*').order('created_at', { ascending: false }),
+        fetchRoommatesFromCloud(supabase),
+        fetchProperties(supabase),
+        fetchBrokers(supabase)
+      ]);
 
-      if (error) {
-        console.error("Supabase fetch error:", error);
-        if (showToastNotice) showToast("⚠️ Cloud sync failed: " + (error.message || 'Check connection'));
-        return;
+      if (inquiriesRes.status === 'fulfilled') {
+        const { data, error } = inquiriesRes.value;
+        if (error) {
+          console.error("Supabase fetch inquiries error:", error);
+          if (showToastNotice) showToast("⚠️ Inquiries sync error: " + error.message);
+        } else if (data) {
+          const mapped = data.map(row => ({
+            id: row.id,
+            name: row.name,
+            phone: row.phone,
+            bhk: row.bhk,
+            property: row.property || row.bhk,
+            location: row.location,
+            furnishing: row.furnishing,
+            budget: row.budget,
+            shiftingDate: row.shifting_date,
+            tenantType: row.tenant_type,
+            source: row.source,
+            status: row.status,
+            isHot: row.is_hot,
+            isClosed: row.is_closed,
+            createdAt: row.created_at,
+            lastFollowUp: formatEnquiryTimestamp(row.created_at)
+          }));
+          setLeads(mapped);
+          try {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(mapped));
+          } catch (e) {
+            console.error(e);
+          }
+        }
       }
 
-      if (data) {
-        const mapped = data.map(row => ({
-          id: row.id,
-          name: row.name,
-          phone: row.phone,
-          bhk: row.bhk,
-          property: row.property || row.bhk,
-          location: row.location,
-          furnishing: row.furnishing,
-          budget: row.budget,
-          shiftingDate: row.shifting_date,
-          tenantType: row.tenant_type,
-          status: row.status,
-          isHot: row.is_hot,
-          isClosed: row.is_closed,
-          lastFollowUp: row.last_follow_up || 'Recently'
-        }));
-        setLeads(mapped);
-        if (showToastNotice) showToast(`Synced ${mapped.length} inquiries from cloud`);
+      if (roommatesRes.status === 'fulfilled' && roommatesRes.value?.data) {
+        setRoommates(roommatesRes.value.data);
+      }
+
+      if (propertiesRes.status === 'fulfilled' && propertiesRes.value?.data) {
+        setProperties(propertiesRes.value.data);
+      }
+
+      if (brokersRes.status === 'fulfilled' && brokersRes.value?.data) {
+        setBrokers(brokersRes.value.data);
+      }
+
+      if (showToastNotice) {
+        showToast("Synced inquiries, roommates, flats & brokers from cloud");
       }
     } catch (err) {
       console.error("Supabase load exception:", err);
@@ -173,6 +242,140 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleAddRoommate = async (newProfile) => {
+    setRoommates(prev => [newProfile, ...prev]);
+    await createRoommateInCloud(supabase, newProfile);
+  };
+
+  const handleUpdateRoommate = async (updatedProfile) => {
+    setRoommates(prev => prev.map(p => p.id === updatedProfile.id ? updatedProfile : p));
+    await updateRoommateInCloud(supabase, updatedProfile);
+  };
+
+  const handleDeleteRoommate = async (id) => {
+    setRoommates(prev => prev.filter(p => p.id !== id));
+    await deleteRoommateFromCloud(supabase, id);
+  };
+
+  const handleToggleVerifyRoommate = async (id, isVerified) => {
+    setRoommates(prev => prev.map(p => p.id === id ? { ...p, isVerified } : p));
+    const found = roommates.find(p => p.id === id);
+    if (found) {
+      await updateRoommateInCloud(supabase, { ...found, isVerified });
+      showToast(isVerified ? '🛡️ Profile marked as Verified' : '⚠️ Profile marked as Unverified');
+    }
+  };
+
+  const handleToggleStatusRoommate = async (id, newStatus) => {
+    setRoommates(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p));
+    const found = roommates.find(p => p.id === id);
+    if (found) {
+      await updateRoommateInCloud(supabase, { ...found, status: newStatus });
+      showToast(newStatus === 'paired' ? '🤝 Flatmate marked as Paired/Found!' : '🔄 Profile reactivated');
+    }
+  };
+
+  // Property Handlers
+  const handleAddProperty = async (newProp) => {
+    setProperties(prev => [newProp, ...prev]);
+    await createProperty(supabase, newProp);
+  };
+
+  const handleUpdateProperty = async (updatedProp) => {
+    setProperties(prev => prev.map(p => p.id === updatedProp.id ? updatedProp : p));
+    await updateProperty(supabase, updatedProp);
+  };
+
+  const handleDeleteProperty = async (id) => {
+    setProperties(prev => prev.filter(p => p.id !== id));
+    await deleteProperty(supabase, id);
+  };
+
+  // Broker Handlers
+  const handleAddBroker = async (newBroker) => {
+    setBrokers(prev => [newBroker, ...prev]);
+    await createBroker(supabase, newBroker);
+  };
+
+  const handleUpdateBroker = async (updatedBroker) => {
+    setBrokers(prev => prev.map(b => b.id === updatedBroker.id ? updatedBroker : b));
+    await updateBroker(supabase, updatedBroker);
+  };
+
+  const handleDeleteBroker = async (id) => {
+    setBrokers(prev => prev.filter(b => b.id !== id));
+    await deleteBroker(supabase, id);
+  };
+
+  // Lead Assignment Handler for Super Admin
+  const handleAssignLeadToBroker = async (leadId, brokerId) => {
+    const selectedBroker = brokers.find(b => b.id === brokerId) || null;
+
+    setLeads(prev => prev.map(lead => {
+      if (lead.id === leadId) {
+        return {
+          ...lead,
+          assignedBrokerId: selectedBroker ? selectedBroker.id : null,
+          assignedBrokerName: selectedBroker ? selectedBroker.name : null,
+          assignedBrokerPhone: selectedBroker ? selectedBroker.phone : null,
+          assignedAt: selectedBroker ? new Date().toISOString() : null
+        };
+      }
+      return lead;
+    }));
+
+    showToast(
+      selectedBroker
+        ? `🎯 Inquiry assigned to ${selectedBroker.name} (${selectedBroker.agencyName || 'Broker'})`
+        : 'Inquiry unassigned'
+    );
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('inquiries').update({
+          assigned_broker_id: selectedBroker ? selectedBroker.id : null,
+          assigned_broker_name: selectedBroker ? selectedBroker.name : null,
+          assigned_broker_phone: selectedBroker ? selectedBroker.phone : null
+        }).eq('id', leadId);
+      } catch (err) {
+        console.warn("Supabase lead assignment sync warning:", err);
+      }
+    }
+  };
+
+  // Lead Status Handler
+  const handleUpdateLeadStatus = async (leadId, newStatus) => {
+    setLeads(prev => prev.map(lead => {
+      if (lead.id === leadId) {
+        return {
+          ...lead,
+          status: newStatus,
+          isClosed: newStatus === 'Booked' || newStatus === 'Closed'
+        };
+      }
+      return lead;
+    }));
+    showToast(`Lead status updated to ${newStatus}`);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('inquiries').update({
+          status: newStatus,
+          is_closed: newStatus === 'Booked' || newStatus === 'Closed'
+        }).eq('id', leadId);
+      } catch (err) {
+        console.warn("Supabase status update warning:", err);
+      }
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    setCurrentUser(null);
+    setShowAuthModal(true);
+    showToast('Signed out successfully');
   };
 
   // Live Supabase Database Sync (Realtime + Periodic Poll Fallback)
@@ -206,7 +409,8 @@ export default function App() {
                 status: row.status || l.status,
                 isHot: row.is_hot !== undefined ? row.is_hot : l.isHot,
                 isClosed: row.is_closed !== undefined ? row.is_closed : l.isClosed,
-                lastFollowUp: row.last_follow_up || l.lastFollowUp
+                createdAt: row.created_at || l.createdAt,
+                lastFollowUp: formatEnquiryTimestamp(row.created_at || row.last_follow_up || l.lastFollowUp)
               } : l);
             }
             return [{
@@ -223,7 +427,8 @@ export default function App() {
               status: row.status,
               isHot: row.is_hot,
               isClosed: row.is_closed,
-              lastFollowUp: row.last_follow_up || 'Just now'
+              createdAt: row.created_at,
+              lastFollowUp: formatEnquiryTimestamp(row.created_at || row.last_follow_up)
             }, ...prev];
           });
         } else if (payload.eventType === 'UPDATE') {
@@ -246,6 +451,18 @@ export default function App() {
         } else if (payload.eventType === 'DELETE') {
           const oldRow = payload.old;
           setLeads(prev => prev.filter(l => l.id !== oldRow.id));
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'roommates' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const row = payload.new;
+          setRoommates(prev => [row, ...prev.filter(r => r.id !== row.id)]);
+        } else if (payload.eventType === 'UPDATE') {
+          const row = payload.new;
+          setRoommates(prev => prev.map(r => r.id === row.id ? { ...r, ...row } : r));
+        } else if (payload.eventType === 'DELETE') {
+          const oldRow = payload.old;
+          setRoommates(prev => prev.filter(r => r.id !== oldRow.id));
         }
       })
       .subscribe((status) => {
@@ -431,6 +648,8 @@ export default function App() {
   // Save AI Lead
   const handleSaveAiLead = () => {
     if (!aiParsedLead) return;
+    const nowIso = new Date().toISOString();
+    const formattedTimestamp = formatEnquiryTimestamp(nowIso);
     const newLead = {
       id: `LD-${Date.now().toString().slice(-4)}`,
       name: aiParsedLead.name || 'Caller Inquiry',
@@ -444,7 +663,8 @@ export default function App() {
       tenantType: aiParsedLead.tenantType || '',
       status: aiParsedLead.isHot ? 'Hot Lead' : 'Active Lead',
       isHot: !!aiParsedLead.isHot,
-      lastFollowUp: 'Just now'
+      createdAt: nowIso,
+      lastFollowUp: formattedTimestamp
     };
 
     setLeads(prev => [newLead, ...prev]);
@@ -469,7 +689,8 @@ export default function App() {
         status: newLead.status,
         is_hot: newLead.isHot,
         is_closed: false,
-        last_follow_up: 'Just now'
+        created_at: nowIso,
+        last_follow_up: formattedTimestamp
       }]).then(({ error }) => {
         if (error) console.warn("Supabase insert error:", error);
       });
@@ -632,10 +853,41 @@ export default function App() {
   const closedLeadsList = leads.filter(l => l.isClosed === true || l.status === 'Booked' || l.status === 'Closed');
   const closedCount = closedLeadsList.length;
 
+  const cleanSearchQuery = (searchQuery || '').trim();
+  const hasActiveSearch = cleanSearchQuery.length > 0;
+
   const filteredLeads = leads.filter(lead => {
     const isHot = !lead.isClosed && (lead.isHot === true || lead.status === 'Hot Lead');
     const isClosed = lead.isClosed === true || lead.status === 'Booked' || lead.status === 'Closed';
-    
+
+    // 1. Robust Case-Insensitive Search Match (supports small, CAPITAL, Mixed, and multi-word tokens)
+    const matchesSearch = matchesSearchQuery(
+      cleanSearchQuery,
+      lead.name,
+      lead.phone,
+      lead.location,
+      lead.bhk,
+      lead.property,
+      lead.furnishing,
+      lead.tenantType,
+      lead.budget,
+      lead.shiftingDate,
+      lead.assignedBrokerName,
+      lead.status,
+      lead.id
+    );
+
+    if (!matchesSearch) return false;
+
+    // When the user explicitly types a search query (e.g., searching by tenant name),
+    // we show matching results immediately and avoid hiding them behind secondary chips
+    if (hasActiveSearch) {
+      if (activeTab === 'closed') return isClosed;
+      if (activeTab === 'hot') return isHot;
+      return true; // Show matching lead directly on 'all' tab
+    }
+
+    // Standard Tab filtering when NOT searching
     let matchesTab = true;
     if (activeTab === 'all') matchesTab = !lead.isClosed;
     else if (activeTab === 'hot') matchesTab = isHot;
@@ -647,7 +899,7 @@ export default function App() {
     const follow = (lead.lastFollowUp || '').toLowerCase();
 
     if (shiftingFilter === 'Fresh') {
-      matchesTimeline = follow.includes('just') || follow.includes('min') || follow.includes('hr');
+      matchesTimeline = follow.includes('today') || follow.includes('just') || follow.includes('min') || follow.includes('hr');
     } else if (shiftingFilter === 'This Month') {
       matchesTimeline = shift.includes('nov') || shift.includes('this month') || shift.includes('now') || shift.includes('immediate') || shift.includes('7 day');
     } else if (shiftingFilter === 'Next Month') {
@@ -676,16 +928,7 @@ export default function App() {
       matchesLocation = !isShapoorji && !isNewtown;
     }
 
-    const q = searchQuery.toLowerCase();
-    const matchesSearch = 
-      lead.name.toLowerCase().includes(q) ||
-      lead.phone.toLowerCase().includes(q) ||
-      (lead.location && lead.location.toLowerCase().includes(q)) ||
-      (lead.bhk && lead.bhk.toLowerCase().includes(q)) ||
-      (lead.furnishing && lead.furnishing.toLowerCase().includes(q)) ||
-      (lead.tenantType && lead.tenantType.toLowerCase().includes(q));
-
-    return matchesTab && matchesTimeline && matchesLocation && matchesSearch;
+    return matchesTab && matchesTimeline && matchesLocation;
   });
 
   // Reset to page 1 whenever search, tab, timeline, or area filter changes
@@ -729,11 +972,52 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Container - Fully Responsive */}
-      <div className="w-full max-w-2xl mx-auto min-h-screen flex flex-col relative pb-8">
+      {/* FULL DASHBOARD LAYOUT: PERSISTENT SIDEBAR ON DESKTOP, FULL-SCREEN APP ON PHONE */}
+      <div className="min-h-screen flex bg-transparent">
+        
+        {/* DESKTOP SIDE PANEL (>= lg only) */}
+        <DesktopSidebar
+          mainSection={mainSection}
+          setMainSection={setMainSection}
+          counts={{
+            leads: leads.length,
+            roommates: roommates.length,
+            properties: properties.length,
+            brokers: brokers.length
+          }}
+          hotLeadsCount={leads.filter(l => !l.isClosed && (l.isHot || l.status === 'Hot Lead')).length}
+          onOpenAdd={() => setShowChoiceModal(true)}
+          isSyncing={isSyncing}
+          onSync={() => fetchSupabaseLeads(true)}
+          isDark={isDark}
+          toggleTheme={toggleTheme}
+          onOpenHelp={() => setShowHelpModal(true)}
+          currentUser={currentUser}
+        />
 
-        {/* ULTRA-MODERN HEADER WITH ILLUMINATED KOLKATA SKYLINE BACKDROP */}
-        <header className="relative px-5 pt-6 pb-6 overflow-hidden transition-all rounded-b-[32px] shadow-xl bg-[#080E21]">
+        {/* MAIN CONTENT WRAPPER */}
+        <div className="flex-1 min-w-0 flex flex-col min-h-screen">
+          
+          {/* DESKTOP TOP BAR (>= lg only) */}
+          <DesktopTopBar
+            mainSection={mainSection}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            onOpenAdd={() => setShowChoiceModal(true)}
+            isSyncing={isSyncing}
+            onSync={() => fetchSupabaseLeads(true)}
+            isDark={isDark}
+            toggleTheme={toggleTheme}
+            totalCount={
+              mainSection === 'inquiries' ? filteredLeads.length :
+              mainSection === 'roommates' ? roommates.length :
+              mainSection === 'properties' ? properties.length : brokers.length
+            }
+          />
+
+          {/* PHONE / MOBILE HEADER (< lg only - PRESERVED 100% UNTOUCHED FOR PHONE UI) */}
+          <div className="lg:hidden">
+            <header className="relative px-5 pt-6 pb-6 overflow-hidden transition-all rounded-b-[32px] shadow-xl bg-[#080E21]">
           {/* Kolkata Twilight Skyline Image Background */}
           <div 
             className="absolute inset-0 bg-cover bg-center opacity-65 mix-blend-luminosity transform scale-105"
@@ -808,6 +1092,8 @@ export default function App() {
                 )}
               </button>
 
+              {/* Theme Toggle Button */}
+
               {/* Primary + Add Lead Button */}
               <button 
                 onClick={() => setShowChoiceModal(true)}
@@ -819,44 +1105,130 @@ export default function App() {
             </div>
           </div>
 
+          {/* Section Switcher: 4 Portals (Desktop / Tablet view) */}
+          <div className="relative z-10 hidden sm:grid sm:grid-cols-4 gap-1.5 mt-2 mb-3 bg-white/[0.08] p-1.5 rounded-2xl border border-white/15 backdrop-blur-md">
+            <button
+              onClick={() => setMainSection('inquiries')}
+              className={`min-h-[40px] py-2 px-2 rounded-xl font-black text-xs transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 ${
+                mainSection === 'inquiries'
+                  ? 'bg-[#FFC800] text-[#0B132B] shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <FileEdit className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">Inquiries</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black shrink-0 ${
+                mainSection === 'inquiries' ? 'bg-black/15 text-[#0B132B]' : 'bg-white/10 text-slate-300'
+              }`}>
+                {leads.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setMainSection('roommates')}
+              className={`min-h-[40px] py-2 px-2 rounded-xl font-black text-xs transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 ${
+                mainSection === 'roommates'
+                  ? 'bg-[#7C3AED] text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">Flatzymates</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black shrink-0 ${
+                mainSection === 'roommates' ? 'bg-white/20 text-white' : 'bg-white/10 text-slate-300'
+              }`}>
+                {roommates.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setMainSection('properties')}
+              className={`min-h-[40px] py-2 px-2 rounded-xl font-black text-xs transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 ${
+                mainSection === 'properties'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">Flats</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black shrink-0 ${
+                mainSection === 'properties' ? 'bg-white/20 text-white' : 'bg-white/10 text-slate-300'
+              }`}>
+                {properties.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setMainSection('brokers')}
+              className={`min-h-[40px] py-2 px-2 rounded-xl font-black text-xs transition-all flex items-center justify-center space-x-1 sm:space-x-1.5 ${
+                mainSection === 'brokers'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Briefcase className="w-3.5 h-3.5 shrink-0" />
+              <span className="whitespace-nowrap">Brokers</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black shrink-0 ${
+                mainSection === 'brokers' ? 'bg-white/20 text-white' : 'bg-white/10 text-slate-300'
+              }`}>
+                {brokers.length}
+              </span>
+            </button>
+          </div>
+
           {/* Subtitle Message */}
           <p className="relative z-10 text-[11px] text-slate-300 font-medium max-w-sm mt-0.5 mb-3 leading-relaxed drop-shadow-xs">
-            Manage your rental inquiries, bookings and leads — all in one place.
+            {mainSection === 'inquiries'
+              ? 'Manage your rental inquiries, bookings and leads — all in one place.'
+              : mainSection === 'roommates'
+                ? 'Manage, verify and moderate Flatzymate roommate & flat sharing listings.'
+                : mainSection === 'properties'
+                  ? 'Inventory of rental and sale flats with 4 property images per listing.'
+                  : 'Manage, verify and monitor Kolkata real estate broker partner profiles.'}
           </p>
 
-          {/* High-Contrast Glassmorphic Search Bar */}
-          <div className="relative z-10">
-            <div className="relative flex items-center">
-              <Search 
-                className="w-4 h-4 text-[#FFC800] absolute left-3.5 z-20 pointer-events-none drop-shadow-sm" 
-                strokeWidth={2.5} 
-              />
-              <input 
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search tenant name, phone, BHK, locality..."
-                className="w-full bg-white/[0.12] hover:bg-white/[0.16] focus:bg-[#080E21]/95 text-xs text-white placeholder-slate-300/80 pl-10 pr-11 py-3 rounded-2xl outline-none focus:ring-2 focus:ring-[#FFC800] border border-white/20 transition-all backdrop-blur-md shadow-inner font-medium"
-              />
-              <div className="absolute right-3.5 flex items-center space-x-1.5 z-20">
-                {searchQuery ? (
-                  <button 
-                    onClick={() => setSearchQuery('')}
-                    className="text-slate-300 hover:text-white transition-colors p-0.5"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                ) : (
-                  <SlidersHorizontal className="w-4 h-4 text-slate-300 hover:text-white cursor-pointer" />
-                )}
+          {/* High-Contrast Glassmorphic Search Bar (Only shown for Inquiries) */}
+          {mainSection === 'inquiries' && (
+            <div className="relative z-10">
+              <div className="relative flex items-center">
+                <Search 
+                  className="w-4 h-4 text-[#FFC800] absolute left-3.5 z-20 pointer-events-none drop-shadow-sm" 
+                  strokeWidth={2.5} 
+                />
+                <input 
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search tenant name, phone, BHK, locality..."
+                  className="w-full bg-white/[0.12] hover:bg-white/[0.16] focus:bg-[#080E21]/95 text-xs text-white placeholder-slate-300/80 pl-10 pr-11 py-3 rounded-2xl outline-none focus:ring-2 focus:ring-[#FFC800] border border-white/20 transition-all backdrop-blur-md shadow-inner font-medium"
+                />
+                <div className="absolute right-3.5 flex items-center space-x-1.5 z-20">
+                  {searchQuery ? (
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="text-slate-300 hover:text-white transition-colors p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <SlidersHorizontal className="w-4 h-4 text-slate-300 hover:text-white cursor-pointer" />
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </header>
+      </div>
 
-        {/* 2x2 METRIC CARDS MATCHING EXACT SCREENSHOT WITH WATERMARK GRAPHICS */}
+      {/* MAIN DASHBOARD BODY CONTAINER */}
+      <div className="w-full max-w-7xl mx-auto flex-1 px-2 sm:px-6 lg:px-8 py-3 lg:py-6 pb-24 sm:pb-8">
+
+        {/* MAIN BODY SECTIONS */}
+        {mainSection === 'inquiries' ? (
+          <>
+        {/* 2x2 METRIC CARDS ON PHONE, 4-CARD KPI ROW ON DESKTOP */}
         <section aria-label="Overview" className="px-4 mt-4 z-10">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4">
             {/* 1. Total Inquiries (Sky Blue with User Watermark) */}
             <button
               onClick={() => setActiveTab('all')}
@@ -991,11 +1363,27 @@ export default function App() {
         {/* LIST TITLE */}
         <div className="px-4 mt-3 flex items-center justify-between text-xs font-semibold">
           <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
-            {activeTab === 'hot' && '🔥 Hot & Urgent Inquiries'}
-            {activeTab === 'closed' && '🎉 Booked & Finalized Deals'}
-            {activeTab === 'all' && '📋 Active Inquiries'} ({filteredLeads.length})
+            {cleanSearchQuery ? (
+              <span className="flex items-center space-x-1.5">
+                <span className="text-[#FFC800] font-bold">🔍 Results for "{cleanSearchQuery}":</span>
+                <span>{filteredLeads.length} found</span>
+              </span>
+            ) : (
+              <>
+                {activeTab === 'hot' && '🔥 Hot & Urgent Inquiries'}
+                {activeTab === 'closed' && '🎉 Booked & Finalized Deals'}
+                {activeTab === 'all' && '📋 Active Inquiries'} ({filteredLeads.length})
+              </>
+            )}
           </span>
-          {activeTab !== 'all' && (
+          {cleanSearchQuery ? (
+            <button 
+              onClick={() => setSearchQuery('')} 
+              className="text-xs text-[#FFC800] hover:text-amber-400 font-bold hover:underline"
+            >
+              Clear Search
+            </button>
+          ) : activeTab !== 'all' && (
             <button 
               onClick={() => setActiveTab('all')} 
               className="text-xs text-blue-500 font-bold hover:underline"
@@ -1085,16 +1473,28 @@ export default function App() {
         </div>
 
         {/* CARDS LIST WITH RESILIENT MISSING-FIELD QUESTION MARKS */}
-        <div className="flex-1 px-4 mt-2.5 mb-3 space-y-3">
+        <div className="flex-1 px-1 sm:px-4 mt-2.5 mb-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 space-y-0">
           {filteredLeads.length === 0 ? (
-            <div className={`text-center py-10 rounded-3xl border border-dashed p-6 mt-4 transition-colors ${
+            <div className={`col-span-full text-center py-10 rounded-3xl border border-dashed p-6 mt-4 transition-colors ${
               isDark ? 'bg-[#1E293B]/50 border-slate-700' : 'bg-white border-slate-200'
             }`}>
               <Users className={`w-10 h-10 mx-auto mb-2 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
-              <p className={`font-bold text-sm ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>No inquiries found</p>
-              <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-400'}`}>
-                Try clearing search/locality filter or tap "+ Add Inquiry".
+              <p className={`font-bold text-sm ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                {cleanSearchQuery ? `No inquiries matching "${cleanSearchQuery}"` : 'No inquiries found'}
               </p>
+              <p className={`text-xs mt-1.5 ${isDark ? 'text-slate-400' : 'text-slate-400'}`}>
+                {cleanSearchQuery 
+                  ? 'Check the spelling or try searching by phone number or locality.'
+                  : 'Try changing timeline/locality filter or tap "+ Add Inquiry".'}
+              </p>
+              {cleanSearchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="mt-3 px-3.5 py-1.5 rounded-full bg-[#FFC800] text-[#0B132B] text-xs font-bold shadow-md hover:bg-[#e6b400] transition-transform active:scale-95"
+                >
+                  Clear Search & View All
+                </button>
+              )}
             </div>
           ) : (
             paginatedLeads.map((lead) => {
@@ -1194,12 +1594,20 @@ export default function App() {
                               <span>DIRECT CALL</span>
                             </span>
                           )}
+
+                          {/* FLATZYMATE LEAD BADGE */}
+                          {((lead.property || '').toLowerCase().includes('flatzymate') || (lead.source || '').toLowerCase().includes('flatzymate')) && (
+                            <span className="bg-purple-600/90 text-white px-2 py-0.5 rounded-full font-extrabold text-[9px] tracking-wide shadow-xs flex items-center space-x-1 border border-purple-400/30">
+                              <Users className="w-2.5 h-2.5" />
+                              <span>FLATZYMATE</span>
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center space-x-2 mt-1 text-[10px]">
                           <span className={`flex items-center ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                             <Clock className="w-3 h-3 mr-1 text-slate-400" />
-                            {lead.lastFollowUp || 'Recently'}
+                            {getLeadTimestamp(lead)}
                           </span>
                           <span className={isDark ? 'text-slate-600' : 'text-slate-300'}>•</span>
                           {/* Shifting Date Tag with fallback */}
@@ -1391,6 +1799,44 @@ export default function App() {
                     </div>
                   )}
 
+                  {/* SUPER ADMIN LEAD ASSIGNMENT SELECTOR */}
+                  <div 
+                    onClick={(e) => e.stopPropagation()} 
+                    className={`mt-2.5 p-2 rounded-xl border flex items-center justify-between text-xs transition-colors ${
+                      lead.assignedBrokerName
+                        ? (isDark ? 'bg-purple-950/30 border-purple-500/30 text-purple-300' : 'bg-purple-50 border-purple-200 text-purple-900')
+                        : (isDark ? 'bg-slate-900/60 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500')
+                    }`}
+                  >
+                    <div className="flex items-center space-x-1.5 min-w-0 pr-2">
+                      <Briefcase className={`w-3.5 h-3.5 shrink-0 ${lead.assignedBrokerName ? 'text-purple-400' : 'text-slate-400'}`} />
+                      <span className="text-[11px] font-bold truncate">
+                        {lead.assignedBrokerName ? (
+                          <span>Assigned: <strong>{lead.assignedBrokerName}</strong></span>
+                        ) : (
+                          'Assign to Broker:'
+                        )}
+                      </span>
+                    </div>
+
+                    <select
+                      value={lead.assignedBrokerId || ''}
+                      onChange={(e) => handleAssignLeadToBroker(lead.id, e.target.value)}
+                      className={`text-[11px] font-bold rounded-lg px-2 py-1 outline-none border transition-all cursor-pointer ${
+                        lead.assignedBrokerName
+                          ? 'bg-purple-600 text-white border-purple-500 shadow-2xs'
+                          : (isDark ? 'bg-slate-800 text-slate-200 border-slate-700 hover:border-slate-600' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400')
+                      }`}
+                    >
+                      <option value="">— Unassigned —</option>
+                      {brokers.map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.agencyName || 'Broker'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* ACTION BUTTONS: Call Directly + WhatsApp + Mark as Booked */}
                   <div className={`mt-3 pt-2.5 border-t flex items-center space-x-2 ${
                     isDark ? 'border-slate-800' : 'border-slate-100'
@@ -1498,6 +1944,48 @@ export default function App() {
             </div>
           </div>
         )}
+          </>
+        ) : mainSection === 'roommates' ? (
+          <div className="mt-4">
+            <RoommatesTab
+              roommates={roommates}
+              onAddRoommate={handleAddRoommate}
+              onUpdateRoommate={handleUpdateRoommate}
+              onDeleteRoommate={handleDeleteRoommate}
+              onToggleVerify={handleToggleVerifyRoommate}
+              onToggleStatus={handleToggleStatusRoommate}
+              showToast={showToast}
+              isDark={isDark}
+            />
+          </div>
+        ) : mainSection === 'properties' ? (
+          <div className="mt-4">
+            <PropertiesTab
+              properties={properties}
+              leads={leads}
+              onAddProperty={handleAddProperty}
+              onUpdateProperty={handleUpdateProperty}
+              onDeleteProperty={handleDeleteProperty}
+              showToast={showToast}
+              isDark={isDark}
+            />
+          </div>
+        ) : (
+          <div className="mt-4">
+            <BrokersTab
+              brokers={brokers}
+              properties={properties}
+              onAddBroker={handleAddBroker}
+              onUpdateBroker={handleUpdateBroker}
+              onDeleteBroker={handleDeleteBroker}
+              onViewBrokerProperties={(brokerId) => {
+                setMainSection('properties');
+              }}
+              showToast={showToast}
+              isDark={isDark}
+            />
+          </div>
+        )}
 
         {/* BOTTOM STATUS BAR */}
         <footer className={`border-t px-4 py-3 mt-1 rounded-2xl flex items-center justify-between text-xs transition-colors ${
@@ -1506,13 +1994,23 @@ export default function App() {
           <div className="flex items-center space-x-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.7)]"></span>
             <span className={`text-[11px] font-bold ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-              Connected to Supabase (Realtime Sync)
+              Connected to Supabase ({currentUser.role === 'admin' ? 'Master Admin' : 'Broker Access'})
             </span>
           </div>
           <span className={`text-[11px] font-bold ${isDark ? 'text-[#FFC800]' : 'text-[#0B132B]'}`}>
-            {filteredLeads.length} {filteredLeads.length === 1 ? 'inquiry' : 'inquiries'} {totalPages > 1 && `(Page ${validCurrentPage} of ${totalPages})`}
+            {mainSection === 'inquiries'
+              ? `${filteredLeads.length} ${filteredLeads.length === 1 ? 'inquiry' : 'inquiries'}`
+              : mainSection === 'roommates'
+                ? `${roommates.length} flatmate profiles`
+                : mainSection === 'properties'
+                  ? `${properties.length} property listings`
+                  : `${brokers.length} partner brokers`}
           </span>
         </footer>
+
+      </div>
+    </div>
+  </div>
 
         {/* ======================================================== */}
         {/* 1. INITIAL CHOICE MODAL: Pure Theme Styles & Simple Terms */}
@@ -1811,6 +2309,8 @@ export default function App() {
                   return;
                 }
 
+                const nowIso = new Date().toISOString();
+                const formattedTimestamp = formatEnquiryTimestamp(nowIso);
                 const newLead = {
                   id: `LD-${Date.now().toString().slice(-4)}`,
                   name,
@@ -1824,7 +2324,8 @@ export default function App() {
                   tenantType: manualTenantType,
                   status: isMarkedHot ? 'Hot Lead' : 'Active Lead',
                   isHot: isMarkedHot,
-                  lastFollowUp: 'Just now'
+                  createdAt: nowIso,
+                  lastFollowUp: formattedTimestamp
                 };
 
                 setLeads(prev => [newLead, ...prev]);
@@ -1847,7 +2348,8 @@ export default function App() {
                     status: newLead.status,
                     is_hot: newLead.isHot,
                     is_closed: false,
-                    last_follow_up: 'Just now'
+                    created_at: nowIso,
+                    last_follow_up: formattedTimestamp
                   }]).then(({ error }) => {
                     if (error) console.warn("Supabase manual insert error:", error);
                   });
@@ -2485,7 +2987,122 @@ export default function App() {
           </div>
         )}
 
-      </div>
+
+
+        {/* ======================================================== */}
+        {/* PHONE UI POP-OUT CIRCULAR DOCK NAVBAR (Matches Screenshot) */}
+        {/* ======================================================== */}
+        <div className="fixed bottom-3 inset-x-3 max-w-md mx-auto z-40 sm:hidden pointer-events-none">
+          <nav
+            aria-label="Phone Bottom Navigation"
+            className={`pointer-events-auto h-[64px] px-2 rounded-[32px] border transition-all duration-300 relative flex items-center justify-between ${
+              isDark
+                ? 'bg-[#0E172E]/95 border-slate-700/80 shadow-[0_16px_40px_rgba(0,0,0,0.7)] backdrop-blur-2xl'
+                : 'bg-white/95 border-slate-200/90 shadow-[0_16px_40px_rgba(15,23,42,0.14),0_2px_8px_rgba(15,23,42,0.06)] backdrop-blur-2xl'
+            }`}
+          >
+            {[
+              {
+                id: 'inquiries',
+                label: 'Inquiries',
+                icon: FileEdit,
+                count: leads.length,
+                activeCircle: isDark 
+                  ? 'bg-[#0E172E] text-[#FFC800] ring-4 ring-[#080E21] border border-white/10 shadow-[0_8px_20px_rgba(255,200,0,0.3)]'
+                  : 'bg-white text-amber-500 ring-4 ring-amber-50/90 border border-slate-200/70 shadow-[0_8px_20px_rgba(0,0,0,0.12)]',
+                badgeBg: 'bg-[#FFC800] text-[#0B132B]'
+              },
+              {
+                id: 'roommates',
+                label: 'Flatzymates',
+                icon: Users,
+                count: roommates.length,
+                activeCircle: isDark
+                  ? 'bg-[#0E172E] text-[#C084FC] ring-4 ring-[#080E21] border border-white/10 shadow-[0_8px_20px_rgba(124,58,237,0.3)]'
+                  : 'bg-white text-[#7C3AED] ring-4 ring-purple-50/90 border border-slate-200/70 shadow-[0_8px_20px_rgba(0,0,0,0.12)]',
+                badgeBg: 'bg-[#7C3AED] text-white'
+              },
+              {
+                id: 'properties',
+                label: 'Flats',
+                icon: Home,
+                count: properties.length,
+                activeCircle: isDark
+                  ? 'bg-[#0E172E] text-blue-400 ring-4 ring-[#080E21] border border-white/10 shadow-[0_8px_20px_rgba(37,99,235,0.3)]'
+                  : 'bg-white text-blue-600 ring-4 ring-blue-50/90 border border-slate-200/70 shadow-[0_8px_20px_rgba(0,0,0,0.12)]',
+                badgeBg: 'bg-blue-600 text-white'
+              },
+              {
+                id: 'brokers',
+                label: 'Brokers',
+                icon: Briefcase,
+                count: brokers.length,
+                activeCircle: isDark
+                  ? 'bg-[#0E172E] text-purple-400 ring-4 ring-[#080E21] border border-white/10 shadow-[0_8px_20px_rgba(147,51,234,0.3)]'
+                  : 'bg-white text-indigo-600 ring-4 ring-indigo-50/90 border border-slate-200/70 shadow-[0_8px_20px_rgba(0,0,0,0.12)]',
+                badgeBg: 'bg-indigo-600 text-white'
+              }
+            ].map(tab => {
+              const isActive = mainSection === tab.id;
+              const Icon = tab.icon;
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setMainSection(tab.id)}
+                  className="flex-1 relative flex flex-col items-center justify-center h-full cursor-pointer transition-all duration-300 select-none group"
+                >
+                  {isActive ? (
+                    /* POPPED-UP FLOATING CIRCULAR POD (From screenshot) */
+                    <div className="flex flex-col items-center -translate-y-5 transition-transform duration-300 ease-out">
+                      {/* Elevated floating circle */}
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 relative ${tab.activeCircle}`}>
+                        <Icon className="w-5 h-5 stroke-[2.5]" />
+                        {tab.count > 0 && (
+                          <span className={`absolute -top-1 -right-1 text-[9px] font-black px-1.5 py-0.2 rounded-full leading-tight shadow-sm ${tab.badgeBg}`}>
+                            {tab.count}
+                          </span>
+                        )}
+                      </div>
+                      {/* Bold active label directly under the circle */}
+                      <span className={`text-[10px] font-black mt-1.5 tracking-tight ${
+                        isDark ? 'text-white' : 'text-slate-900 font-extrabold'
+                      }`}>
+                        {tab.label}
+                      </span>
+                    </div>
+                  ) : (
+                    /* INACTIVE TAB */
+                    <div className="flex flex-col items-center justify-center py-1 transition-all duration-200">
+                      <div className="relative">
+                        <Icon className={`w-5 h-5 transition-colors duration-200 ${
+                          isDark
+                            ? 'text-slate-400 group-hover:text-slate-200'
+                            : 'text-slate-400 group-hover:text-slate-700'
+                        }`} />
+                        {tab.count > 0 && (
+                          <span className={`absolute -top-1.5 -right-2 text-[9px] font-bold px-1.5 py-0.2 rounded-full leading-tight ${
+                            isDark ? 'bg-white/15 text-slate-300' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}>
+                            {tab.count}
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[10px] font-semibold mt-1 transition-colors duration-200 ${
+                        isDark
+                          ? 'text-slate-400 group-hover:text-slate-200'
+                          : 'text-slate-400 group-hover:text-slate-700'
+                      }`}>
+                        {tab.label}
+                      </span>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
     </div>
   );
 }
