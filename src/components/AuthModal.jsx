@@ -1,36 +1,26 @@
 import React, { useState } from 'react';
 import {
   Lock,
-  Mail,
-  User,
-  Phone,
   Building,
   ArrowRight,
-  ShieldCheck,
-  Briefcase,
   AlertCircle,
   Loader2,
-  Sparkles,
   X,
   Crown,
-  KeyRound,
-  CheckCircle2
+  Eye,
+  EyeOff,
+  ShieldCheck
 } from 'lucide-react';
-import { signInWithEmail, signUpBroker } from '../services/authService';
+import { signInWithEmail } from '../services/authService';
 
-export default function AuthModal({ onLoginSuccess, onClose, isDark }) {
-  // Main login type: 'admin' (Super Admin) or 'broker' (Broker Partner)
+export default function AuthModal({ onLoginSuccess, onClose }) {
+  // Main login type: 'admin' (Super Admin) or 'broker' (Vaastu Nivas)
   const [portalMode, setPortalMode] = useState('admin');
-  
-  // For broker mode: 'login' or 'register'
-  const [brokerSubMode, setBrokerSubMode] = useState('login');
 
   // Input states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [agencyName, setAgencyName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -58,42 +48,18 @@ export default function AuthModal({ onLoginSuccess, onClose, isDark }) {
 
     try {
       if (portalMode === 'admin') {
-        // Super Admin Login
         const res = await signInWithEmail(email, password, 'admin');
         if (res.success && res.user) {
           onLoginSuccess(res.user);
         } else {
-          setErrorMsg(res.error || 'Invalid Super Admin credentials.');
-        }
-      } else if (brokerSubMode === 'register') {
-        // Broker Registration
-        if (!name.trim() || !phone.trim()) {
-          setErrorMsg('Please enter your full name and WhatsApp phone number.');
-          setLoading(false);
-          return;
-        }
-
-        const brokerEmail = email.trim() || `${phone.trim()}@flatzy.in`;
-        const res = await signUpBroker({
-          email: brokerEmail,
-          password,
-          name: name.trim(),
-          phone: phone.trim(),
-          agencyName: agencyName.trim() || 'Independent Real Estate'
-        });
-
-        if (res.success && res.user) {
-          onLoginSuccess(res.user);
-        } else {
-          setErrorMsg(res.error || 'Registration failed. Please check details.');
+          setErrorMsg(res.error || 'Invalid Admin credentials.');
         }
       } else {
-        // Broker Sign In
         const res = await signInWithEmail(email, password, 'broker');
         if (res.success && res.user) {
           onLoginSuccess(res.user);
         } else {
-          setErrorMsg(res.error || 'Invalid broker phone number or password.');
+          setErrorMsg(res.error || 'Invalid broker username or password.');
         }
       }
     } catch (err) {
@@ -103,303 +69,183 @@ export default function AuthModal({ onLoginSuccess, onClose, isDark }) {
     }
   };
 
-  // 1-Click Fast Fill for Admin (minudon / dududon)
-  const fillAdminCredentials = () => {
-    setEmail('minudon');
-    setPassword('dududon');
-    setErrorMsg('');
-  };
-
-  // 1-Click Fast Fill for Broker
-  const fillBrokerCredentials = () => {
-    setEmail('9830123456');
-    setPassword('flatzy2026');
-    setErrorMsg('');
-  };
-
   const isAdmin = portalMode === 'admin';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#080E21]/80 backdrop-blur-md overflow-y-auto">
-      <div className={`w-full max-w-md rounded-[32px] p-6 sm:p-8 shadow-2xl border transition-all my-auto relative overflow-hidden ${
-        isDark ? 'bg-[#0E172E] border-slate-700/80 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-slate-300/40'
-      }`}>
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-cover bg-center bg-no-repeat overflow-y-auto animate-in fade-in duration-300"
+      style={{ backgroundImage: `url('/signin-bg.jpg')` }}
+    >
+      {/* Light atmospheric overlay over the Kolkata artwork */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-amber-950/15 to-black/35 backdrop-blur-[0.5px]"></div>
+
+      {/* Main Elegant Light-Theme Dialogue Card */}
+      <div className="w-full max-w-[400px] rounded-3xl p-7 sm:p-8 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35)] border border-white/80 bg-white/95 backdrop-blur-2xl text-slate-900 transition-all relative overflow-hidden z-10 my-auto">
         
-        {/* Glow backdrop based on role */}
-        <div className={`absolute -top-12 -right-12 w-48 h-48 rounded-full blur-3xl pointer-events-none transition-colors ${
-          isAdmin ? 'bg-[#FFC800]/15' : 'bg-[#7C3AED]/20'
+        {/* Subtle decorative glow */}
+        <div className={`absolute -top-16 -right-16 w-36 h-36 rounded-full blur-3xl pointer-events-none transition-colors duration-500 ${
+          isAdmin ? 'bg-[#FFC800]/25' : 'bg-[#7C3AED]/20'
         }`}></div>
 
+        {/* Close button top right if dismissable */}
         {onClose && (
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 z-20 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-all active:scale-90"
+            className="absolute top-4 right-4 w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-all cursor-pointer shrink-0 z-20"
             title="Close"
           >
             <X className="w-4 h-4" />
           </button>
         )}
 
-        {/* Brand Header */}
-        <div className="text-center relative z-10 mb-4">
-          <div className="w-13 h-13 rounded-full overflow-hidden bg-[#FFC800] p-[2px] shadow-[0_4px_20px_rgba(255,200,0,0.4)] mx-auto mb-2">
-            <img 
-              src="/flatzy-logo.jpg" 
-              alt="Flatzy" 
-              className="w-full h-full rounded-full object-cover" 
-            />
+        {/* Centralized Brand Header with Large Prominent Logo */}
+        <div className="relative z-10 flex flex-col items-center text-center mb-5 pb-4 border-b border-slate-100">
+          
+          {/* Large Logo Frame with Golden Ambient Ring */}
+          <div className="relative group mb-3">
+            <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-[#FFC800] via-amber-400 to-[#F59E0B] opacity-60 blur-md group-hover:opacity-90 transition duration-300 pointer-events-none"></div>
+            <div className="relative w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-tr from-[#FFC800] to-amber-300 p-[2.5px] shadow-xl">
+              <img 
+                src="/flatzy-logo.jpg" 
+                alt="Flatzy" 
+                className="w-full h-full rounded-[14px] object-cover" 
+              />
+            </div>
           </div>
+          
+          <h2 className="font-black text-xl tracking-tight text-slate-900">
+            Flatzy Sign In
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5 font-medium">
+            Kolkata Rental & Property Management
+          </p>
 
-          <div className="flex items-center justify-center space-x-2">
-            <h2 className="text-2xl font-black tracking-tight">Flatzy</h2>
-            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-400/20 text-[#FFC800] border border-[#FFC800]/40">
-              PORTAL ACCESS
-            </span>
+          <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-amber-500/10 text-amber-700 border border-amber-500/25 mt-2">
+            <ShieldCheck className="w-3 h-3 text-amber-600 shrink-0" />
+            <span>SECURE ACCESS PORTAL</span>
           </div>
         </div>
 
-        {/* 2 MAIN LOGINS SELECTOR: SUPER ADMIN vs BROKER */}
-        <div className="relative z-10 grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 mb-5">
-          {/* Tab 1: Super Admin */}
+        {/* Segmented 2-Tab Switcher */}
+        <div className="relative z-10 grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-100/90 border border-slate-200 mb-4 text-xs font-bold">
           <button
             type="button"
             onClick={switchToAdmin}
-            className={`py-2.5 px-3 rounded-xl font-black text-xs transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
               isAdmin
-                ? 'bg-gradient-to-r from-[#FFC800] to-[#FFAE00] text-[#0B132B] shadow-md ring-1 ring-[#FFC800]/50'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-[#FFC800] text-[#0B132B] shadow-sm font-black scale-[1.01]'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Crown className="w-4 h-4 shrink-0" />
-            <span className="whitespace-nowrap">Super Admin</span>
+            <Crown className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Super Admin</span>
           </button>
 
-          {/* Tab 2: Broker */}
           <button
             type="button"
             onClick={switchToBroker}
-            className={`py-2.5 px-3 rounded-xl font-black text-xs transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
               !isAdmin
-                ? 'bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] text-white shadow-md ring-1 ring-purple-500/50'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-[#7C3AED] text-white shadow-sm font-black scale-[1.01]'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Briefcase className="w-4 h-4 shrink-0" />
-            <span className="whitespace-nowrap">Broker Portal</span>
+            <Building className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Vaastu Nivas</span>
           </button>
         </div>
 
-        {/* Role Sub-Header Context Badge */}
-        <div className={`p-3 rounded-2xl mb-4 border relative z-10 ${
-          isAdmin
-            ? 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300'
-            : 'bg-purple-500/10 border-purple-500/20 text-purple-700 dark:text-purple-300'
-        }`}>
-          <div className="flex items-center space-x-2">
-            {isAdmin ? <ShieldCheck className="w-4 h-4 shrink-0 text-amber-500" /> : <Building className="w-4 h-4 shrink-0 text-purple-500" />}
-            <div>
-              <p className="font-extrabold text-xs">
-                {isAdmin ? '👑 Super Admin Master Login' : '🤝 Partner Broker Portal'}
-              </p>
-              <p className="text-[11px] opacity-80 mt-0.5">
-                {isAdmin 
-                  ? 'Overall control of tenant leads, Flatzymate, and broker listings.'
-                  : 'Post and manage your flats for Rent or Sale with 4 images each.'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* If Broker Mode: Toggle between Sign In and Register */}
-        {!isAdmin && (
-          <div className="relative z-10 flex items-center p-1 rounded-xl bg-slate-200/70 dark:bg-slate-800 border border-slate-300/70 dark:border-slate-700 mb-4 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => { setBrokerSubMode('login'); setErrorMsg(''); }}
-              className={`flex-1 py-1.5 rounded-lg transition-all text-center ${
-                brokerSubMode === 'login'
-                  ? 'bg-purple-600 text-white shadow-xs font-black'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              Broker Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => { setBrokerSubMode('register'); setErrorMsg(''); }}
-              className={`flex-1 py-1.5 rounded-lg transition-all text-center ${
-                brokerSubMode === 'register'
-                  ? 'bg-purple-600 text-white shadow-xs font-black'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              New Broker Register
-            </button>
-          </div>
-        )}
-
         {/* Error Alert */}
         {errorMsg && (
-          <div className="mb-4 p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-semibold flex items-center space-x-2 animate-in fade-in">
+          <div className="mb-3.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-semibold flex items-center space-x-2 animate-in fade-in">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMsg}</span>
+            <span className="leading-tight">{errorMsg}</span>
           </div>
         )}
 
-        {/* Dynamic Form */}
-        <form onSubmit={handleSubmit} className="space-y-3 relative z-10 text-xs">
+        {/* Direct Sign-In Form (ID & Password) */}
+        <form onSubmit={handleSubmit} className="space-y-3.5 relative z-10 text-xs">
           
-          {/* Extra fields only when Broker is Registering */}
-          {!isAdmin && brokerSubMode === 'register' && (
-            <>
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Your Full Name *</label>
-                <div className="relative flex items-center">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Sagnik Roy"
-                    className="w-full bg-slate-50 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl pl-10 pr-3.5 py-2.5 outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">WhatsApp Phone *</label>
-                  <div className="relative flex items-center">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-                    <input
-                      type="tel"
-                      required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="9876543210"
-                      className="w-full bg-slate-50 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl pl-10 pr-3 py-2.5 outline-none focus:border-[#7C3AED] font-medium text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Agency Name</label>
-                  <div className="relative flex items-center">
-                    <Building className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={agencyName}
-                      onChange={(e) => setAgencyName(e.target.value)}
-                      placeholder="e.g. New Town Realty"
-                      className="w-full bg-slate-50 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl pl-10 pr-3 py-2.5 outline-none focus:border-[#7C3AED] font-medium text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Super Admin ID or Broker Phone Number (Only needed for Login mode) */}
-          {(isAdmin || brokerSubMode === 'login') && (
-            <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                {isAdmin ? 'Super Admin ID *' : 'Broker Phone Number *'}
-              </label>
-              <div className="relative flex items-center">
-                {isAdmin ? (
-                  <Crown className="w-4 h-4 text-amber-500 absolute left-3.5 pointer-events-none" />
-                ) : (
-                  <Phone className="w-4 h-4 text-purple-400 absolute left-3.5 pointer-events-none" />
-                )}
-                <input
-                  type="text"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={isAdmin ? "minudon" : "9830123456"}
-                  className={`w-full bg-slate-50 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl pl-10 pr-3.5 py-2.5 outline-none font-medium ${
-                    isAdmin 
-                      ? 'focus:border-[#FFC800] focus:ring-2 focus:ring-[#FFC800]/20' 
-                      : 'focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20'
-                  }`}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Password */}
+          {/* Username / ID */}
           <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Password *</label>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+              {isAdmin ? 'Admin ID' : 'Broker ID / Phone'}
+            </label>
             <div className="relative flex items-center">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+              {isAdmin ? (
+                <Crown className="w-4 h-4 text-amber-500 absolute left-3.5 pointer-events-none" />
+              ) : (
+                <Building className="w-4 h-4 text-purple-500 absolute left-3.5 pointer-events-none" />
+              )}
               <input
-                type="password"
+                type="text"
                 required
-                minLength={4}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`w-full bg-slate-50 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl pl-10 pr-3.5 py-2.5 outline-none font-medium ${
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={isAdmin ? "Enter Admin ID" : "Enter Broker ID or Phone"}
+                className={`w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl pl-10 pr-3.5 py-2.5 outline-none font-semibold text-xs sm:text-sm transition-all ${
                   isAdmin 
-                    ? 'focus:border-[#FFC800] focus:ring-2 focus:ring-[#FFC800]/20' 
-                    : 'focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20'
+                    ? 'focus:border-[#FFC800] focus:ring-2 focus:ring-[#FFC800]/25' 
+                    : 'focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/25'
                 }`}
               />
             </div>
           </div>
 
-          {/* Submit Button */}
+          {/* Password with Eye Toggle */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">Password</label>
+            <div className="relative flex items-center">
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                minLength={4}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                className={`w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl pl-10 pr-10 py-2.5 outline-none font-semibold text-xs sm:text-sm transition-all ${
+                  isAdmin 
+                    ? 'focus:border-[#FFC800] focus:ring-2 focus:ring-[#FFC800]/25' 
+                    : 'focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/25'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 text-slate-400 hover:text-slate-700 cursor-pointer p-1 transition-colors"
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Sign In Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-3 rounded-2xl font-black text-sm flex items-center justify-center space-x-2 shadow-lg transition-all active:scale-95 cursor-pointer mt-4 ${
+            className={`w-full py-3 rounded-xl font-black text-sm flex items-center justify-center space-x-2 shadow-md transition-all active:scale-[0.99] cursor-pointer mt-4 ${
               isAdmin
-                ? 'bg-gradient-to-r from-[#FFC800] via-[#FFD21A] to-[#FFAE00] text-[#0B132B] hover:brightness-105 shadow-amber-500/20'
-                : 'bg-gradient-to-r from-[#7C3AED] via-[#6D28D9] to-[#5B21B6] text-white hover:brightness-105 shadow-purple-500/20'
+                ? 'bg-gradient-to-r from-[#FFC800] via-[#FFD21A] to-[#FFAE00] text-[#0B132B] hover:brightness-105 shadow-amber-500/25'
+                : 'bg-gradient-to-r from-[#8B5CF6] via-[#7C3AED] to-[#6D28D9] text-white hover:brightness-105 shadow-purple-500/25'
             }`}
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <>
-                <span>
-                  {isAdmin
-                    ? 'Sign In to Super Admin'
-                    : brokerSubMode === 'register'
-                      ? 'Register & Access Broker Dashboard'
-                      : 'Sign In to Broker Portal'}
-                </span>
+                <span>{isAdmin ? 'Sign In as Super Admin' : 'Sign In as Vaastu Nivas'}</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
 
-        {/* 1-Click Fast Credentials for Quick Testing */}
-        <div className="mt-5 pt-4 border-t border-slate-200 dark:border-slate-800 text-[11px] text-center text-slate-400">
-          <p className="font-semibold mb-2">⚡ 1-Tap Quick Fill for Testing:</p>
-          <div className="flex items-center justify-center space-x-2">
-            {isAdmin ? (
-              <button
-                type="button"
-                onClick={fillAdminCredentials}
-                className="px-3 py-1.5 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold hover:bg-amber-500/25 transition-all flex items-center space-x-1 cursor-pointer"
-              >
-                <Crown className="w-3.5 h-3.5" />
-                <span>Fill Super Admin (minudon / dududon)</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={fillBrokerCredentials}
-                className="px-3 py-1.5 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 font-bold hover:bg-purple-500/25 transition-all flex items-center space-x-1 cursor-pointer"
-              >
-                <Briefcase className="w-3.5 h-3.5" />
-                <span>Fill Demo Broker (9830123456)</span>
-              </button>
-            )}
-          </div>
+        {/* Security watermark footer */}
+        <div className="mt-5 pt-3 border-t border-slate-100 text-center text-[10px] text-slate-400 font-medium">
+          <span>🔒 256-bit Encrypted Session • Flatzy Kolkata HQ</span>
         </div>
 
       </div>

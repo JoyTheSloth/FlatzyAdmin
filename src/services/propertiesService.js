@@ -102,16 +102,21 @@ export const fetchProperties = async (supabaseClient, brokerIdFilter = null) => 
         amenities: Array.isArray(row.amenities) ? row.amenities : [],
         status: row.status || 'available',
         isVerified: row.is_verified ?? true,
-        images: Array.isArray(row.images) ? row.images.slice(0, 4) : [],
+        images: Array.isArray(row.images) ? row.images.slice(0, 6) : [],
         description: row.description || '',
         createdAt: row.created_at || new Date().toISOString()
       }));
 
-      saveLocalProperties(mapped);
+      // Merge cloud properties with any locally uploaded properties not yet reflected in cloud query
+      const cloudIds = new Set(cloudProps.map(r => r.id));
+      const unsyncedLocals = localList.filter(lp => !cloudIds.has(lp.id));
+      const combined = [...unsyncedLocals, ...mapped];
+
+      saveLocalProperties(combined);
       if (brokerIdFilter) {
-        return { data: mapped.filter(p => p.brokerId === brokerIdFilter), fromCloud: true };
+        return { data: combined.filter(p => p.brokerId === brokerIdFilter), fromCloud: true };
       }
-      return { data: mapped, fromCloud: true };
+      return { data: combined, fromCloud: true };
     }
 
     return { data: localList, fromCloud: false };
@@ -150,7 +155,7 @@ export const createProperty = async (supabaseClient, property) => {
       amenities: property.amenities || [],
       status: property.status || 'available',
       is_verified: property.isVerified ?? false,
-      images: (property.images || []).filter(Boolean).slice(0, 4),
+      images: (property.images || []).filter(Boolean).slice(0, 6),
       description: property.description,
       created_at: property.createdAt || new Date().toISOString()
     };
@@ -191,7 +196,7 @@ export const updateProperty = async (supabaseClient, property) => {
       furnishing: property.furnishing,
       amenities: property.amenities || [],
       status: property.status,
-      images: (property.images || []).filter(Boolean).slice(0, 4),
+      images: (property.images || []).filter(Boolean).slice(0, 6),
       description: property.description
     };
 

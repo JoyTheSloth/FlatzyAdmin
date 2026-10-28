@@ -23,7 +23,8 @@ export default function DesktopTopBar({
   onSync,
   isDark,
   toggleTheme,
-  totalCount = 0
+  totalCount = 0,
+  onOpenAuth
 }) {
   const getSectionMeta = () => {
     switch (mainSection) {
@@ -166,6 +167,7 @@ export default function DesktopTopBar({
         >
           {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
+
 
         {/* Primary Action Button */}
         <button

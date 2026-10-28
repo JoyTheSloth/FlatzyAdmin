@@ -14,7 +14,8 @@ import {
   Building2,
   Sparkles,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from 'lucide-react';
 
 export default function DesktopSidebar({
@@ -28,7 +29,9 @@ export default function DesktopSidebar({
   isDark,
   toggleTheme,
   onOpenHelp,
-  currentUser = {}
+  currentUser = {},
+  onOpenAuth,
+  onSignOut
 }) {
   const navItems = [
     {
@@ -257,6 +260,15 @@ export default function DesktopSidebar({
             >
               <HelpCircle className="w-3.5 h-3.5" />
             </button>
+            {(onOpenAuth || onSignOut) && (
+              <button
+                onClick={onOpenAuth || onSignOut}
+                title="Switch Account / Sign in as Broker"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-purple-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>

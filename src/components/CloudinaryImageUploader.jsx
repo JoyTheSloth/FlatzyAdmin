@@ -15,7 +15,7 @@ import { uploadImageToCloudinary } from '../services/cloudinaryService';
 export default function CloudinaryImageUploader({
   images = [],
   onChange,
-  maxImages = 4,
+  maxImages = 6,
   isDark = true,
   showToast
 }) {
@@ -38,7 +38,7 @@ export default function CloudinaryImageUploader({
 
     const filesToUpload = files.slice(0, availableSlots);
     if (files.length > availableSlots && showToast) {
-      showToast(`ℹ️ 4-photo limit applied: Uploading ${filesToUpload.length} of ${files.length} selected photos.`);
+      showToast(`ℹ️ ${maxImages}-photo limit applied: Uploading ${filesToUpload.length} of ${files.length} selected photos.`);
     }
 
     setUploading(true);
@@ -104,7 +104,7 @@ export default function CloudinaryImageUploader({
             <div className="flex items-center space-x-1.5">
               <span className="font-extrabold text-xs">Flat Photos</span>
               <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-500/15 text-blue-500">
-                Limit: 4 Photos
+                Limit: {maxImages} Photos
               </span>
             </div>
             <p className="text-[10px] text-slate-400">
@@ -124,9 +124,9 @@ export default function CloudinaryImageUploader({
         </div>
       </div>
 
-      {/* 4-Slots Visual Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-3">
-        {[0, 1, 2, 3].map((slotIdx) => {
+      {/* 6-Slots Visual Grid */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 my-3">
+        {Array.from({ length: maxImages }, (_, i) => i).map((slotIdx) => {
           const photoUrl = cleanImages[slotIdx];
           const isNextAvailableSlot = !photoUrl && slotIdx === cleanImages.length;
 
@@ -166,7 +166,7 @@ export default function CloudinaryImageUploader({
             return (
               <label
                 key={slotIdx}
-                className={`aspect-4/3 rounded-xl border-2 border-dashed flex flex-col items-center justify-center p-2 text-center transition-all cursor-pointer ${
+                className={`aspect-4/3 rounded-xl border-2 border-dashed flex flex-col items-center justify-center p-1.5 text-center transition-all cursor-pointer ${
                   uploading
                     ? 'opacity-60 pointer-events-none border-blue-500 bg-blue-500/5'
                     : isDark
@@ -184,19 +184,19 @@ export default function CloudinaryImageUploader({
                 />
                 {uploading ? (
                   <>
-                    <Loader2 className="w-5 h-5 text-blue-500 animate-spin mb-1" />
-                    <span className="text-[10px] font-bold text-blue-500 leading-tight">
+                    <Loader2 className="w-4 h-4 text-blue-500 animate-spin mb-1" />
+                    <span className="text-[9px] font-bold text-blue-500 leading-tight">
                       {uploadProgress || 'Uploading...'}
                     </span>
                   </>
                 ) : (
                   <>
-                    <div className="w-8 h-8 rounded-full bg-blue-500/15 text-blue-500 flex items-center justify-center mb-1 shadow-xs">
-                      <UploadCloud className="w-4 h-4 stroke-[2.5]" />
+                    <div className="w-6 h-6 rounded-full bg-blue-500/15 text-blue-500 flex items-center justify-center mb-0.5 shadow-xs">
+                      <UploadCloud className="w-3.5 h-3.5 stroke-[2.5]" />
                     </div>
-                    <span className="text-[11px] font-black">Upload Photo</span>
-                    <span className="text-[9px] opacity-75 font-semibold">
-                      Slot {slotIdx + 1} of 4
+                    <span className="text-[10px] font-black">Upload</span>
+                    <span className="text-[8px] opacity-75 font-semibold">
+                      Slot {slotIdx + 1}/{maxImages}
                     </span>
                   </>
                 )}
@@ -208,14 +208,14 @@ export default function CloudinaryImageUploader({
           return (
             <div
               key={slotIdx}
-              className={`aspect-4/3 rounded-xl border-2 border-dashed flex flex-col items-center justify-center p-2 text-center select-none ${
+              className={`aspect-4/3 rounded-xl border-2 border-dashed flex flex-col items-center justify-center p-1.5 text-center select-none ${
                 isDark
                   ? 'border-slate-800 text-slate-600'
                   : 'border-slate-200 text-slate-300'
               }`}
             >
-              <ImageIcon className="w-5 h-5 mb-1 stroke-[1.5] opacity-40" />
-              <span className="text-[10px] font-bold opacity-60">Slot #{slotIdx + 1}</span>
+              <ImageIcon className="w-4 h-4 mb-0.5 stroke-[1.5] opacity-40" />
+              <span className="text-[9px] font-bold opacity-60">#{slotIdx + 1}</span>
             </div>
           );
         })}
@@ -233,14 +233,14 @@ export default function CloudinaryImageUploader({
         </button>
 
         <span className="text-[10px] text-slate-400">
-          {remainingSlots > 0 ? `${remainingSlots} slot${remainingSlots > 1 ? 's' : ''} left` : 'All 4 photo slots filled'}
+          {remainingSlots > 0 ? `${remainingSlots} slot${remainingSlots > 1 ? 's' : ''} left` : `All ${maxImages} photo slots filled`}
         </span>
       </div>
 
       {/* Manual URL Input Rows (Expandable) */}
       {showUrlInputs && (
         <div className="mt-2.5 space-y-1.5 pt-1">
-          {[0, 1, 2, 3].map(i => (
+          {Array.from({ length: maxImages }, (_, i) => i).map(i => (
             <div key={i} className="flex items-center space-x-1.5">
               <span className="text-[10px] font-mono font-bold text-slate-400 w-5 text-right">
                 #{i + 1}

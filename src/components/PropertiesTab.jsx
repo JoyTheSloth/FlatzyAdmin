@@ -28,12 +28,14 @@ import {
   Filter,
   Eye,
   SlidersHorizontal,
-  FileEdit
+  FileEdit,
+  Clock
 } from 'lucide-react';
 import { KOLKATA_LOCATIONS } from '../data/leadsData';
 import { matchesSearchQuery } from '../utils/searchUtils';
 import CloudinaryImageUploader from './CloudinaryImageUploader';
 import AiPropertyQuickBox from './AiPropertyQuickBox';
+import { getPropertyTimestamp } from '../utils/dateUtils';
 
 export const COMMON_AMENITIES = [
   'Lift',
@@ -57,7 +59,9 @@ export default function PropertiesTab({
   onUpdateProperty,
   onDeleteProperty,
   showToast,
-  isDark
+  isDark,
+  openAddModal = false,
+  onCloseAddModal
 }) {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,7 +75,12 @@ export default function PropertiesTab({
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Modals & Interactive States
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [internalAddModal, setInternalAddModal] = useState(false);
+  const showAddModal = openAddModal || internalAddModal;
+  const setShowAddModal = (val) => {
+    setInternalAddModal(val);
+    if (!val && onCloseAddModal) onCloseAddModal();
+  };
   const [editingProperty, setEditingProperty] = useState(null);
   const [propertyToDelete, setPropertyToDelete] = useState(null);
   const [selectedFlatForLeads, setSelectedFlatForLeads] = useState(null); // Flat opened in "Matching Leads" modal
@@ -93,7 +102,7 @@ export default function PropertiesTab({
     furnishing: 'Semi Furnished',
     amenities: ['Lift', 'Car Parking', '24/7 Security'],
     description: '',
-    images: ['', '', '', ''],
+    images: ['', '', '', '', '', ''],
     brokerName: 'Flatzy Direct',
     brokerPhone: '918910376054',
     status: 'available',
@@ -356,7 +365,7 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
       return;
     }
 
-    const cleanImages = (formData.images || []).map(s => s.trim()).filter(Boolean).slice(0, 4);
+    const cleanImages = (formData.images || []).map(s => s.trim()).filter(Boolean).slice(0, 6);
 
     const newProp = {
       id: `prop_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -391,7 +400,7 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
     e.preventDefault();
     if (!editingProperty) return;
 
-    const cleanImages = (editingProperty.images || []).map(s => s.trim()).filter(Boolean).slice(0, 4);
+    const cleanImages = (editingProperty.images || []).map(s => s.trim()).filter(Boolean).slice(0, 6);
 
     const updated = {
       ...editingProperty,
@@ -717,11 +726,12 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredProperties.map(prop => {
-            const validImages = (prop.images || []).filter(Boolean).slice(0, 4);
+            const validImages = (prop.images || []).filter(Boolean).slice(0, 6);
             const isRent = prop.listingType === 'rent';
             const matchingLeads = propertyMatchesMap[prop.id] || [];
             const hasMatches = matchingLeads.length > 0;
             const currentStatus = prop.status || 'available';
+            const timeMeta = getPropertyTimestamp(prop);
 
             return (
               <div
@@ -730,7 +740,7 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
                   isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 hover:border-blue-300'
                 }`}
               >
-                {/* Header Row: Type Badge + BHK + Sq.Ft + Posting Date + Price */}
+                {/* Header Row: Type Badge + BHK + Sq.Ft + Countdown + Posting Date + Price */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center space-x-2 flex-wrap gap-y-1">
@@ -747,10 +757,16 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
                         <span>{prop.sqft ? `${prop.sqft} sq.ft` : '1,000 sq.ft'}</span>
                       </span>
 
+                      {/* Elapsed Countdown Pill (e.g. "Just now", "7 days ago", "14 days ago") */}
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border flex items-center space-x-1 ${timeMeta.badgeClass}`} title={`Posted on ${timeMeta.fullDate}`}>
+                        <Clock className="w-3 h-3" />
+                        <span>{timeMeta.timeAgo}</span>
+                      </span>
+
                       {/* Posting Date */}
-                      <span className="text-[10px] font-semibold text-slate-400 flex items-center space-x-1">
+                      <span className="text-[10px] font-semibold text-slate-400 flex items-center space-x-1" title={timeMeta.timeStr ? `Time: ${timeMeta.timeStr}` : ''}>
                         <Calendar className="w-3 h-3 text-slate-400" />
-                        <span>Posted: {prop.postingDate || 'Recent'}</span>
+                        <span>{timeMeta.dateStr}</span>
                       </span>
 
                       <span className="text-xs font-semibold text-slate-400">• {prop.brokerName || 'Broker'}</span>
@@ -837,7 +853,7 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
 
                 {/* Photo Gallery Grid (Clickable Lightbox) or Fallback Specs */}
                 {validImages.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-2 my-3">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 my-3">
                     {validImages.map((imgUrl, idx) => (
                       <div
                         key={idx}
@@ -1190,66 +1206,73 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
                 <div>
                   <h3 className="text-sm sm:text-base font-black tracking-tight leading-tight">Post New Flat</h3>
                   <p className="text-[11px] sm:text-xs text-slate-400">
-                    Add property details or auto-extract with AI
+                    Add flat details manually or auto-fill with AI
                   </p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+              {/* Pill Toggle with Circle: AI Details Filler vs Manual */}
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center p-1 rounded-full bg-slate-200/80 dark:bg-slate-800 border border-slate-300/80 dark:border-slate-700 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setPhonePostMode('ai')}
+                    className={`flex items-center space-x-1.5 py-1 px-3 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      phonePostMode === 'ai'
+                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-xs font-black'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full transition-all ${
+                      phonePostMode === 'ai' ? 'bg-amber-400 ring-2 ring-white/50 animate-pulse' : 'bg-slate-400/50'
+                    }`} />
+                    <Sparkles className="w-3 h-3" />
+                    <span>AI Details Filler</span>
+                  </button>
 
-            {/* PHONE COMPACT 2-BUTTON SELECTOR: MANUAL OR AI POWERED */}
-            <div className="lg:hidden px-4 pt-3 pb-2 shrink-0 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800">
-              <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/80 dark:bg-slate-800 border border-slate-300/80 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setPhonePostMode('manual')}
+                    className={`flex items-center space-x-1.5 py-1 px-3 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      phonePostMode === 'manual'
+                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-black border border-slate-200 dark:border-slate-600'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full transition-all ${
+                      phonePostMode === 'manual' ? 'bg-emerald-500 ring-2 ring-emerald-300' : 'bg-slate-400/50'
+                    }`} />
+                    <FileEdit className="w-3 h-3" />
+                    <span>Manual</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setPhonePostMode('manual')}
-                  className={`py-2 px-3 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-                    phonePostMode === 'manual'
-                      ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-700 font-black'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
+                  onClick={() => setShowAddModal(false)}
+                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
-                  <FileEdit className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>📝 Manual</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPhonePostMode('ai')}
-                  className={`py-2 px-3 rounded-xl font-black text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-                    phonePostMode === 'ai'
-                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-[#0B132B] shadow-sm font-black'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5 fill-current" />
-                  <span>⚡ AI Powered</span>
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* 2. BODY CONTAINER (Responsive: Compact single mode on phone, full 2-column studio on desktop) */}
+            {/* 2. BODY CONTAINER */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
-                {/* LEFT COLUMN: AI Magic Fast-Fill + 4-Photo Uploader */}
-                <div className={`lg:col-span-5 space-y-4 ${phonePostMode === 'ai' ? 'block' : 'hidden lg:block'}`}>
-                  {/* AI Magic Box */}
-                  <AiPropertyQuickBox
-                    onParsedProperty={(parsed) => {
-                      handleAiParsedProperty(parsed);
-                      showToast('✅ Details extracted with AI! Review & publish below.');
-                    }}
-                    showToast={showToast}
-                    isDark={isDark}
-                  />
+                {/* LEFT COLUMN: AI Details Filler (if AI mode) + 4-Photo Uploader */}
+                <div className="lg:col-span-5 space-y-4">
+                  {phonePostMode === 'ai' && (
+                    <AiPropertyQuickBox
+                      onParsedProperty={(parsed) => {
+                        handleAiParsedProperty(parsed);
+                        showToast('✅ Details extracted with AI! Review & publish below.');
+                      }}
+                      showToast={showToast}
+                      isDark={isDark}
+                    />
+                  )}
 
                   {/* Cloudinary CDN 4-Photo Uploader */}
                   <CloudinaryImageUploader

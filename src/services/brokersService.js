@@ -2,7 +2,21 @@ import { supabase, isSupabaseConfigured } from './supabase';
 
 const BROKERS_STORAGE_KEY = 'flatzy_admin_brokers_v1';
 
-export const INITIAL_BROKERS = [];
+export const VASTU_NIWAS_BROKER_PROFILE = {
+  id: 'broker-vastu-niwas',
+  name: 'Vaastu Nivas',
+  phone: '9830123456',
+  agencyName: 'Vaastu Nivas',
+  isVerified: true,
+  status: 'active',
+  totalProperties: 0,
+  rentCount: 0,
+  saleCount: 0,
+  joinedDate: 'Oct 2026',
+  notes: 'Verified Broker Partner (Login: vaastunivas / vaastu)'
+};
+
+export const INITIAL_BROKERS = [VASTU_NIWAS_BROKER_PROFILE];
 
 const MOCK_BROKER_IDS = new Set(['broker-1', 'broker-2', 'broker-3', 'broker-4']);
 
@@ -12,7 +26,10 @@ export const getLocalBrokers = () => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const cleaned = parsed.filter(b => !MOCK_BROKER_IDS.has(b.id));
+        let cleaned = parsed.filter(b => !MOCK_BROKER_IDS.has(b.id));
+        if (!cleaned.some(b => b.id === 'broker-vastu-niwas' || b.name === 'Vaastu Nivas' || b.name === 'Vastu Niwas')) {
+          cleaned = [VASTU_NIWAS_BROKER_PROFILE, ...cleaned];
+        }
         if (cleaned.length !== parsed.length) {
           saveLocalBrokers(cleaned);
         }
@@ -22,7 +39,7 @@ export const getLocalBrokers = () => {
   } catch (e) {
     console.error('[BrokersService] Error reading localStorage:', e);
   }
-  return [];
+  return [VASTU_NIWAS_BROKER_PROFILE];
 };
 
 export const saveLocalBrokers = (brokers) => {
@@ -55,7 +72,7 @@ export const fetchBrokers = async (client = supabase) => {
     }
 
     if (Array.isArray(data)) {
-      const mapped = data.map(row => ({
+      let mapped = data.map(row => ({
         id: row.id,
         name: row.name || row.full_name || 'Broker Partner',
         phone: row.phone || row.whatsapp || '',
@@ -68,6 +85,10 @@ export const fetchBrokers = async (client = supabase) => {
         joinedDate: row.created_at ? new Date(row.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : 'Recently',
         notes: row.notes || ''
       }));
+      // Always guarantee Vaastu Nivas is included in the active broker directory
+      if (!mapped.some(b => b.id === 'broker-vastu-niwas' || b.name === 'Vaastu Nivas' || b.name === 'Vastu Niwas')) {
+        mapped = [VASTU_NIWAS_BROKER_PROFILE, ...mapped];
+      }
       saveLocalBrokers(mapped);
       return { data: mapped, source: 'cloud' };
     }

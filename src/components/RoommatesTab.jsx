@@ -31,7 +31,9 @@ export default function RoommatesTab({
   onToggleVerify,
   onToggleStatus,
   showToast,
-  isDark
+  isDark,
+  openAddModal = false,
+  onCloseAddModal
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Room in Flat', 'Team-Up'
@@ -43,7 +45,12 @@ export default function RoommatesTab({
   const [copiedPhoneId, setCopiedPhoneId] = useState(null);
   const [editingRoommate, setEditingRoommate] = useState(null);
   const [roommateToDelete, setRoommateToDelete] = useState(null);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [internalAddModal, setInternalAddModal] = useState(false);
+  const showAddModal = openAddModal || internalAddModal;
+  const setShowAddModal = (val) => {
+    setInternalAddModal(val);
+    if (!val && onCloseAddModal) onCloseAddModal();
+  };
 
   // New roommate form state
   const defaultFormState = {

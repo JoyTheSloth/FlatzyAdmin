@@ -67,7 +67,8 @@ import {
   createBroker,
   updateBroker,
   deleteBroker,
-  getLocalBrokers
+  getLocalBrokers,
+  VASTU_NIWAS_BROKER_PROFILE
 } from './services/brokersService';
 import { getCurrentUser, signOutUser, DEFAULT_ADMIN_USER } from './services/authService';
 import { matchesSearchQuery } from './utils/searchUtils';
@@ -75,6 +76,36 @@ import { formatEnquiryTimestamp, getLeadTimestamp } from './utils/dateUtils';
 
 const LOCAL_STORAGE_KEY = 'flatzy_admin_leads_v3';
 const THEME_STORAGE_KEY = 'flatzy_admin_theme_v3';
+const ASSIGNMENTS_STORAGE_KEY = 'flatzy_admin_lead_assignments_v1';
+
+export const getSavedAssignments = () => {
+  try {
+    const raw = localStorage.getItem(ASSIGNMENTS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.error('[Assignments] Error reading assignments:', e);
+  }
+  return {};
+};
+
+export const saveLeadAssignment = (leadId, broker) => {
+  try {
+    const assignments = getSavedAssignments();
+    if (broker) {
+      assignments[leadId] = {
+        assignedBrokerId: broker.id || 'broker-vastu-niwas',
+        assignedBrokerName: broker.name || 'Vaastu Nivas',
+        assignedBrokerPhone: broker.phone || '9830123456',
+        assignedAt: new Date().toISOString()
+      };
+    } else {
+      delete assignments[leadId];
+    }
+    localStorage.setItem(ASSIGNMENTS_STORAGE_KEY, JSON.stringify(assignments));
+  } catch (e) {
+    console.error('[Assignments] Error saving assignment:', e);
+  }
+};
 
 export default function App() {
   const [theme, setTheme] = useState(() => {
@@ -88,16 +119,32 @@ export default function App() {
   });
 
   const [leads, setLeads] = useState(() => {
+    const savedAssignments = getSavedAssignments();
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map(l => {
+            const assignment = savedAssignments[l.id];
+            if (assignment) {
+              return { ...l, ...assignment };
+            }
+            return l;
+          });
+        }
+      }
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_LEADS;
+    return INITIAL_LEADS.map(l => {
+      const assignment = savedAssignments[l.id];
+      if (assignment) return { ...l, ...assignment };
+      return l;
+    });
   });
 
-  const [currentUser, setCurrentUser] = useState(() => getCurrentUser() || DEFAULT_ADMIN_USER);
+  const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const [mainSection, setMainSection] = useState('inquiries'); // 'inquiries', 'roommates', 'properties', 'brokers'
@@ -116,6 +163,16 @@ export default function App() {
   const [showAiModal, setShowAiModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [openSectionAddModal, setOpenSectionAddModal] = useState(false);
+
+  // Dispatch add modal based on current main section
+  const handleSectionAdd = () => {
+    if (mainSection === 'inquiries') {
+      setShowChoiceModal(true);
+    } else {
+      setOpenSectionAddModal(true);
+    }
+  };
 
   // AI Parser state
   const [aiRawInput, setAiRawInput] = useState('');
@@ -172,6 +229,42 @@ export default function App() {
     }
   }, [leads]);
 
+  // Ensure that if no leads are assigned to Vaastu Nivas yet, pre-assign 2 sample leads for immediate broker exploration
+  useEffect(() => {
+    if (leads && leads.length > 0) {
+      const hasVastuAssigned = leads.some(l => 
+        l.assignedBrokerId === 'broker-vastu-niwas' || 
+        (l.assignedBrokerName && (l.assignedBrokerName.toLowerCase().includes('vastu') || l.assignedBrokerName.toLowerCase().includes('vaastu')))
+      );
+      if (!hasVastuAssigned) {
+        const savedAssignments = getSavedAssignments();
+        const updated = leads.map((l, idx) => {
+          if (idx < 2) {
+            savedAssignments[l.id] = {
+              assignedBrokerId: 'broker-vastu-niwas',
+              assignedBrokerName: 'Vaastu Nivas',
+              assignedBrokerPhone: '9830123456',
+              assignedAt: new Date().toISOString()
+            };
+            return {
+              ...l,
+              ...savedAssignments[l.id]
+            };
+          }
+          return l;
+        });
+
+        try {
+          localStorage.setItem(ASSIGNMENTS_STORAGE_KEY, JSON.stringify(savedAssignments));
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+        } catch (e) {
+          console.error(e);
+        }
+        setLeads(updated);
+      }
+    }
+  }, [leads.length]);
+
   // Fetch leads and roommates from Supabase
   const fetchSupabaseLeads = async (showToastNotice = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -194,30 +287,56 @@ export default function App() {
           console.error("Supabase fetch inquiries error:", error);
           if (showToastNotice) showToast("⚠️ Inquiries sync error: " + error.message);
         } else if (data) {
-          const mapped = data.map(row => ({
-            id: row.id,
-            name: row.name,
-            phone: row.phone,
-            bhk: row.bhk,
-            property: row.property || row.bhk,
-            location: row.location,
-            furnishing: row.furnishing,
-            budget: row.budget,
-            shiftingDate: row.shifting_date,
-            tenantType: row.tenant_type,
-            source: row.source,
-            status: row.status,
-            isHot: row.is_hot,
-            isClosed: row.is_closed,
-            createdAt: row.created_at,
-            lastFollowUp: formatEnquiryTimestamp(row.created_at)
-          }));
-          setLeads(mapped);
+          const savedAssignments = getSavedAssignments();
+          const mapped = data.map(row => {
+            const remoteId = row.assigned_broker_id || row.assignedBrokerId || null;
+            const remoteName = row.assigned_broker_name || row.assignedBrokerName || null;
+            const remotePhone = row.assigned_broker_phone || row.assignedBrokerPhone || null;
+            const remoteAt = row.assigned_at || row.assignedAt || null;
+
+            const localAssignment = savedAssignments[row.id];
+
+            // If Supabase already has an assignment, sync local assignment map
+            if (remoteId && remoteName && (!localAssignment || localAssignment.assignedBrokerId !== remoteId)) {
+              savedAssignments[row.id] = {
+                assignedBrokerId: remoteId,
+                assignedBrokerName: remoteName,
+                assignedBrokerPhone: remotePhone,
+                assignedAt: remoteAt || new Date().toISOString()
+              };
+            }
+
+            return {
+              id: row.id,
+              name: row.name,
+              phone: row.phone,
+              bhk: row.bhk,
+              property: row.property || row.bhk,
+              location: row.location,
+              furnishing: row.furnishing,
+              budget: row.budget,
+              shiftingDate: row.shifting_date,
+              tenantType: row.tenant_type,
+              source: row.source,
+              status: row.status,
+              isHot: row.is_hot,
+              isClosed: row.is_closed,
+              createdAt: row.created_at,
+              lastFollowUp: formatEnquiryTimestamp(row.created_at),
+              assignedBrokerId: remoteId || localAssignment?.assignedBrokerId || null,
+              assignedBrokerName: remoteName || localAssignment?.assignedBrokerName || null,
+              assignedBrokerPhone: remotePhone || localAssignment?.assignedBrokerPhone || null,
+              assignedAt: remoteAt || localAssignment?.assignedAt || null
+            };
+          });
+          
           try {
+            localStorage.setItem(ASSIGNMENTS_STORAGE_KEY, JSON.stringify(savedAssignments));
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(mapped));
           } catch (e) {
             console.error(e);
           }
+          setLeads(mapped);
         }
       }
 
@@ -311,9 +430,23 @@ export default function App() {
 
   // Lead Assignment Handler for Super Admin
   const handleAssignLeadToBroker = async (leadId, brokerId) => {
-    const selectedBroker = brokers.find(b => b.id === brokerId) || null;
+    let selectedBroker = brokers.find(b => b.id === brokerId) || null;
 
-    setLeads(prev => prev.map(lead => {
+    // Fail-safe: Always resolve Vaastu Nivas even if broker directory was not ready
+    if (!selectedBroker && (
+      brokerId === 'broker-vastu-niwas' || 
+      brokerId === 'vaastu' || 
+      brokerId === 'vastu' ||
+      brokerId === 'nivas'
+    )) {
+      selectedBroker = VASTU_NIWAS_BROKER_PROFILE;
+    }
+
+    // 1. Instantly save in dedicated persistent assignments map
+    saveLeadAssignment(leadId, selectedBroker);
+
+    // 2. Update memory state and leads local storage
+    const updatedLeads = leads.map(lead => {
       if (lead.id === leadId) {
         return {
           ...lead,
@@ -324,7 +457,14 @@ export default function App() {
         };
       }
       return lead;
-    }));
+    });
+
+    setLeads(updatedLeads);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedLeads));
+    } catch (e) {
+      console.error(e);
+    }
 
     showToast(
       selectedBroker
@@ -332,15 +472,17 @@ export default function App() {
         : 'Inquiry unassigned'
     );
 
+    // 3. Sync to Supabase inquiries table if configured
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('inquiries').update({
           assigned_broker_id: selectedBroker ? selectedBroker.id : null,
           assigned_broker_name: selectedBroker ? selectedBroker.name : null,
-          assigned_broker_phone: selectedBroker ? selectedBroker.phone : null
+          assigned_broker_phone: selectedBroker ? selectedBroker.phone : null,
+          assigned_at: selectedBroker ? new Date().toISOString() : null
         }).eq('id', leadId);
       } catch (err) {
-        console.warn("Supabase lead assignment sync warning:", err);
+        console.warn("Supabase lead assignment sync notice:", err);
       }
     }
   };
@@ -392,6 +534,15 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inquiries' }, (payload) => {
         if (payload.eventType === 'INSERT') {
           const row = payload.new;
+          const assignedId = row.assigned_broker_id || row.assignedBrokerId || null;
+          const assignedName = row.assigned_broker_name || row.assignedBrokerName || null;
+          const assignedPhone = row.assigned_broker_phone || row.assignedBrokerPhone || null;
+          const assignedAt = row.assigned_at || row.assignedAt || null;
+
+          if (assignedId && assignedName) {
+            saveLeadAssignment(row.id, { id: assignedId, name: assignedName, phone: assignedPhone });
+          }
+
           setLeads(prev => {
             const exists = prev.some(l => l.id === row.id);
             if (exists) {
@@ -410,7 +561,11 @@ export default function App() {
                 isHot: row.is_hot !== undefined ? row.is_hot : l.isHot,
                 isClosed: row.is_closed !== undefined ? row.is_closed : l.isClosed,
                 createdAt: row.created_at || l.createdAt,
-                lastFollowUp: formatEnquiryTimestamp(row.created_at || row.last_follow_up || l.lastFollowUp)
+                lastFollowUp: formatEnquiryTimestamp(row.created_at || row.last_follow_up || l.lastFollowUp),
+                assignedBrokerId: assignedId || l.assignedBrokerId,
+                assignedBrokerName: assignedName || l.assignedBrokerName,
+                assignedBrokerPhone: assignedPhone || l.assignedBrokerPhone,
+                assignedAt: assignedAt || l.assignedAt
               } : l);
             }
             return [{
@@ -428,25 +583,44 @@ export default function App() {
               isHot: row.is_hot,
               isClosed: row.is_closed,
               createdAt: row.created_at,
-              lastFollowUp: formatEnquiryTimestamp(row.created_at || row.last_follow_up)
+              lastFollowUp: formatEnquiryTimestamp(row.created_at || row.last_follow_up),
+              assignedBrokerId: assignedId,
+              assignedBrokerName: assignedName,
+              assignedBrokerPhone: assignedPhone,
+              assignedAt: assignedAt
             }, ...prev];
           });
         } else if (payload.eventType === 'UPDATE') {
           const row = payload.new;
+          const assignedId = row.assigned_broker_id !== undefined ? row.assigned_broker_id : undefined;
+          const assignedName = row.assigned_broker_name !== undefined ? row.assigned_broker_name : undefined;
+          const assignedPhone = row.assigned_broker_phone !== undefined ? row.assigned_broker_phone : undefined;
+          const assignedAt = row.assigned_at !== undefined ? row.assigned_at : undefined;
+
+          if (assignedId && assignedName) {
+            saveLeadAssignment(row.id, { id: assignedId, name: assignedName, phone: assignedPhone });
+          } else if (assignedId === null) {
+            saveLeadAssignment(row.id, null);
+          }
+
           setLeads(prev => prev.map(l => l.id === row.id ? {
             ...l,
-            name: row.name,
-            phone: row.phone,
-            bhk: row.bhk,
-            location: row.location,
-            furnishing: row.furnishing,
-            budget: row.budget,
-            shiftingDate: row.shifting_date,
-            tenantType: row.tenant_type,
-            status: row.status,
-            isHot: row.is_hot,
-            isClosed: row.is_closed,
-            lastFollowUp: row.last_follow_up || l.lastFollowUp
+            name: row.name || l.name,
+            phone: row.phone || l.phone,
+            bhk: row.bhk || l.bhk,
+            location: row.location || l.location,
+            furnishing: row.furnishing || l.furnishing,
+            budget: row.budget || l.budget,
+            shiftingDate: row.shifting_date || l.shiftingDate,
+            tenantType: row.tenant_type || l.tenantType,
+            status: row.status || l.status,
+            isHot: row.is_hot !== undefined ? row.is_hot : l.isHot,
+            isClosed: row.is_closed !== undefined ? row.is_closed : l.isClosed,
+            lastFollowUp: row.last_follow_up || l.lastFollowUp,
+            assignedBrokerId: assignedId !== undefined ? assignedId : l.assignedBrokerId,
+            assignedBrokerName: assignedName !== undefined ? assignedName : l.assignedBrokerName,
+            assignedBrokerPhone: assignedPhone !== undefined ? assignedPhone : l.assignedBrokerPhone,
+            assignedAt: assignedAt !== undefined ? assignedAt : l.assignedAt
           } : l));
         } else if (payload.eventType === 'DELETE') {
           const oldRow = payload.old;
@@ -944,6 +1118,78 @@ export default function App() {
 
   const isDark = theme === 'dark';
 
+  // 1. If not authenticated, render AuthModal directly with Kolkata artwork background
+  if (!currentUser) {
+    return (
+      <div 
+        className="min-h-screen flex items-center justify-center font-sans bg-cover bg-center bg-no-repeat relative"
+        style={{ backgroundImage: `url('/signin-bg.jpg')` }}
+      >
+        <AuthModal
+          onLoginSuccess={(u) => {
+            setCurrentUser(u);
+            setShowAuthModal(false);
+            showToast(`Welcome back, ${u.name}!`);
+          }}
+          isDark={isDark}
+        />
+      </div>
+    );
+  }
+
+  // 2. If logged in as Broker (e.g. Vastu Niwas), render dedicated Broker Dashboard
+  if (currentUser?.role === 'broker') {
+    return (
+      <div className={`min-h-screen font-sans transition-colors duration-300 selection:bg-[#7C3AED] selection:text-white ${
+        isDark ? 'bg-[#0B132B] text-slate-100' : 'bg-[#F4F5F9] text-[#0B132B]'
+      }`}>
+        {/* Toast */}
+        {toastMessage && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 transform scale-100">
+            <div className="bg-[#0B132B]/95 text-white pl-3.5 pr-2.5 py-1.5 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.35)] border border-[#7C3AED]/50 backdrop-blur-md text-[11px] font-semibold flex items-center space-x-2.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#7C3AED] animate-ping"></span>
+              <span className="tracking-tight">{toastMessage}</span>
+            </div>
+          </div>
+        )}
+
+        <BrokerDashboard
+          currentUser={currentUser}
+          properties={properties}
+          leads={leads}
+          onAddProperty={handleAddProperty}
+          onUpdateProperty={handleUpdateProperty}
+          onDeleteProperty={handleDeleteProperty}
+          onUpdateLeadStatus={handleUpdateLeadStatus}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onSignOut={() => {
+            signOutUser();
+            setCurrentUser(null);
+            setShowAuthModal(true);
+            showToast('Signed out of Broker Portal');
+          }}
+          showToast={showToast}
+          isDark={isDark}
+          toggleTheme={toggleTheme}
+          isSyncing={isSyncing}
+          onSync={() => fetchSupabaseLeads(true)}
+        />
+
+        {showAuthModal && (
+          <AuthModal
+            onLoginSuccess={(u) => {
+              setCurrentUser(u);
+              setShowAuthModal(false);
+              showToast(`Logged in as ${u.name}`);
+            }}
+            onClose={() => setShowAuthModal(false)}
+            isDark={isDark}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen font-sans transition-colors duration-300 selection:bg-[#FFC800] selection:text-[#0B132B] ${
       isDark ? 'bg-[#0B132B] text-slate-100' : 'bg-[#F4F5F9] text-[#0B132B]'
@@ -986,13 +1232,20 @@ export default function App() {
             brokers: brokers.length
           }}
           hotLeadsCount={leads.filter(l => !l.isClosed && (l.isHot || l.status === 'Hot Lead')).length}
-          onOpenAdd={() => setShowChoiceModal(true)}
+          onOpenAdd={handleSectionAdd}
           isSyncing={isSyncing}
           onSync={() => fetchSupabaseLeads(true)}
           isDark={isDark}
           toggleTheme={toggleTheme}
           onOpenHelp={() => setShowHelpModal(true)}
           currentUser={currentUser}
+          onOpenAuth={() => setShowAuthModal(true)}
+          onSignOut={() => {
+            signOutUser();
+            setCurrentUser(null);
+            setShowAuthModal(true);
+            showToast('Signed out');
+          }}
         />
 
         {/* MAIN CONTENT WRAPPER */}
@@ -1003,7 +1256,7 @@ export default function App() {
             mainSection={mainSection}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
-            onOpenAdd={() => setShowChoiceModal(true)}
+            onOpenAdd={handleSectionAdd}
             isSyncing={isSyncing}
             onSync={() => fetchSupabaseLeads(true)}
             isDark={isDark}
@@ -1013,6 +1266,7 @@ export default function App() {
               mainSection === 'roommates' ? roommates.length :
               mainSection === 'properties' ? properties.length : brokers.length
             }
+            onOpenAuth={() => setShowAuthModal(true)}
           />
 
           {/* PHONE / MOBILE HEADER (< lg only - PRESERVED 100% UNTOUCHED FOR PHONE UI) */}
@@ -1092,7 +1346,15 @@ export default function App() {
                 )}
               </button>
 
-              {/* Theme Toggle Button */}
+              {/* Broker Portal Quick Switcher */}
+              <button
+                onClick={() => setShowAuthModal(true)}
+                title="Switch Account / Open Broker Portal (Vastu Niwas)"
+                aria-label="Broker Portal"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 active:scale-90 flex items-center justify-center transition-all duration-200 border border-purple-400/40 backdrop-blur-md text-purple-300 hover:text-white shadow-xs cursor-pointer"
+              >
+                <Briefcase className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+              </button>
 
               {/* Primary + Add Lead Button */}
               <button 
@@ -1956,6 +2218,8 @@ export default function App() {
               onToggleStatus={handleToggleStatusRoommate}
               showToast={showToast}
               isDark={isDark}
+              openAddModal={openSectionAddModal}
+              onCloseAddModal={() => setOpenSectionAddModal(false)}
             />
           </div>
         ) : mainSection === 'properties' ? (
@@ -1968,6 +2232,8 @@ export default function App() {
               onDeleteProperty={handleDeleteProperty}
               showToast={showToast}
               isDark={isDark}
+              openAddModal={openSectionAddModal}
+              onCloseAddModal={() => setOpenSectionAddModal(false)}
             />
           </div>
         ) : (
@@ -1983,6 +2249,8 @@ export default function App() {
               }}
               showToast={showToast}
               isDark={isDark}
+              openAddModal={openSectionAddModal}
+              onCloseAddModal={() => setOpenSectionAddModal(false)}
             />
           </div>
         )}
@@ -3102,6 +3370,19 @@ export default function App() {
             })}
           </nav>
         </div>
+
+        {/* Auth Modal for Switching Account / Logging In */}
+        {showAuthModal && (
+          <AuthModal
+            onLoginSuccess={(u) => {
+              setCurrentUser(u);
+              setShowAuthModal(false);
+              showToast(`Logged in as ${u.name}`);
+            }}
+            onClose={() => setShowAuthModal(false)}
+            isDark={isDark}
+          />
+        )}
 
     </div>
   );

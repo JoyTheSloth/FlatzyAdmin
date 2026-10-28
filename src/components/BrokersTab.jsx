@@ -28,13 +28,20 @@ export default function BrokersTab({
   onDeleteBroker,
   onViewBrokerProperties,
   showToast,
-  isDark
+  isDark,
+  openAddModal = false,
+  onCloseAddModal
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'verified', 'pending', 'active', 'suspended'
   
   // Modals
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [internalAddModal, setInternalAddModal] = useState(false);
+  const showAddModal = openAddModal || internalAddModal;
+  const setShowAddModal = (val) => {
+    setInternalAddModal(val);
+    if (!val && onCloseAddModal) onCloseAddModal();
+  };
   const [editingBroker, setEditingBroker] = useState(null);
   const [brokerToDelete, setBrokerToDelete] = useState(null);
   const [copiedId, setCopiedId] = useState(null);

@@ -19,8 +19,18 @@ create table if not exists inquiries (
   is_hot boolean default false,
   is_closed boolean default false,
   last_follow_up text default 'Just now',
+  assigned_broker_id text,
+  assigned_broker_name text,
+  assigned_broker_phone text,
+  assigned_at timestamp with time zone,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
+
+-- Alter existing inquiries table in case it was already created without broker columns
+alter table inquiries add column if not exists assigned_broker_id text;
+alter table inquiries add column if not exists assigned_broker_name text;
+alter table inquiries add column if not exists assigned_broker_phone text;
+alter table inquiries add column if not exists assigned_at timestamp with time zone;
 
 -- Enable RLS for inquiries
 alter table inquiries enable row level security;

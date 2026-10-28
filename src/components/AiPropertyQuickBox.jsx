@@ -97,14 +97,14 @@ export default function AiPropertyQuickBox({
           <div>
             <div className="flex items-center space-x-2">
               <span className="font-black text-sm text-violet-400 dark:text-violet-300 tracking-tight">
-                AI Magic Fast-Fill
+                AI Details Filler
               </span>
               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">
-                Groq LLaMA 3.3 70B
+                Auto Fill
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">
-              Paste WhatsApp listing forwards or rough notes — AI auto-labels and populates all form fields
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Paste flat details or WhatsApp message below to fill the form in 1 click.
             </p>
           </div>
         </div>
@@ -124,10 +124,10 @@ export default function AiPropertyQuickBox({
       {/* Raw Text Box */}
       <div className="relative">
         <textarea
-          rows={4}
+          rows={3}
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
-          placeholder="Paste raw WhatsApp listing or type freely, e.g.:&#10;'2 BHK in Shapoorji Sukhobristhi, 18k rent, 36k deposit, semi furnished with lift parking, contact rahul 9830123456'..."
+          placeholder="Paste message or notes here (e.g. 2 BHK in New Town, 18k rent, lift, parking)..."
           className={`w-full p-3 rounded-xl border text-xs outline-none transition-all resize-y font-medium leading-relaxed ${
             isDark
               ? 'bg-slate-900/95 border-slate-700/80 text-slate-100 placeholder-slate-500 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20'
@@ -135,7 +135,7 @@ export default function AiPropertyQuickBox({
           }`}
         />
         <div className="absolute bottom-2 right-2.5 text-[10px] text-slate-500 select-none">
-          {rawText.length > 0 ? `${rawText.length} chars` : 'Ready to paste'}
+          {rawText.length > 0 ? `${rawText.length} characters` : ''}
         </div>
       </div>
 
@@ -143,7 +143,7 @@ export default function AiPropertyQuickBox({
       <div className="flex items-center justify-between mt-3 flex-wrap gap-2.5">
         <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mr-0.5">
-            Quick Fill:
+            Examples:
           </span>
           {SAMPLE_LISTINGS.map((sample, idx) => (
             <button
@@ -174,12 +174,12 @@ export default function AiPropertyQuickBox({
           {isParsing ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>AI Analyzing & Labelizing...</span>
+              <span>Filling details...</span>
             </>
           ) : (
             <>
               <Wand2 className="w-4 h-4" />
-              <span>✨ Auto-Fill Form with AI</span>
+              <span>Fill Form with AI</span>
             </>
           )}
         </button>
@@ -195,10 +195,10 @@ export default function AiPropertyQuickBox({
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center space-x-1.5 font-black text-xs">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>AI Successfully Extracted & Labeled Fields:</span>
+              <span>Form filled successfully:</span>
             </div>
             <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-md">
-              Form Populated ✓
+              Filled ✓
             </span>
           </div>
 

@@ -1,31 +1,39 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { getLocalBrokers } from './brokersService';
 
+const SESSION_USER_KEY = 'flatzy_admin_active_session_v2';
 const LOCAL_USER_KEY = 'flatzy_admin_current_user_v1';
 
-// Default mock admin profile for offline/local fallback
+// Default mock admin profile for authorized Super Admin
 export const DEFAULT_ADMIN_USER = {
   id: 'admin-master',
   email: 'minudon',
   role: 'admin',
-  name: 'Super Admin (Minudon)',
+  name: 'Super Admin',
   agencyName: 'Flatzy HQ',
   phone: '918910376054'
 };
 
-// Default mock broker profile for offline/local fallback
-export const DEFAULT_BROKER_USER = {
-  id: 'broker-demo-1',
-  email: 'broker@flatzy.in',
+// Vaastu Nivas verified broker profile
+export const VASTU_NIWAS_BROKER_USER = {
+  id: 'broker-vastu-niwas',
+  email: 'vaastunivas@flatzy.in',
   role: 'broker',
-  name: 'Rajesh Sharma',
-  agencyName: 'Kolkata Prime Properties',
-  phone: '9830123456'
+  name: 'Vaastu Nivas',
+  agencyName: 'Vaastu Nivas',
+  phone: '9830123456',
+  isVerified: true
 };
 
+export const DEFAULT_BROKER_USER = VASTU_NIWAS_BROKER_USER;
+
+/**
+ * Retrieve current logged-in user from active session.
+ * Does NOT default to any user, strictly requiring login.
+ */
 export const getCurrentUser = () => {
   try {
-    const raw = localStorage.getItem(LOCAL_USER_KEY);
+    const raw = sessionStorage.getItem(SESSION_USER_KEY);
     if (raw) {
       return JSON.parse(raw);
     }
@@ -38,24 +46,32 @@ export const getCurrentUser = () => {
 export const saveCurrentUser = (user) => {
   try {
     if (user) {
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(user));
+      sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
     } else {
-      localStorage.removeItem(LOCAL_USER_KEY);
+      sessionStorage.removeItem(SESSION_USER_KEY);
     }
+    // Purge old persistent storage so anyone opening the site starts fresh and locked
+    localStorage.removeItem(LOCAL_USER_KEY);
+    localStorage.removeItem('flatzy_current_user');
   } catch (err) {
     console.error('[AuthService] Error saving user session:', err);
   }
 };
 
 /**
- * Sign in using Supabase Auth (or fallback if offline/mock)
+ * Sign in with strictly verified credentials.
  */
 export const signInWithEmail = async (email, password, portalType = null) => {
   const cleanId = (email || '').trim().toLowerCase();
+  const cleanPassword = (password || '').trim().toLowerCase();
 
-  // Super Admin Credentials: id: 'minudon', password: 'dududon' (also preserves legacy admin@flatzy.in)
+  if (!cleanId || !cleanPassword) {
+    return { success: false, error: 'Please enter both ID and Password.' };
+  }
+
+  // 1. Super Admin Credentials: id: 'minudon', password: 'dududon'
   const isSuperAdminId = cleanId === 'minudon' || cleanId === 'minudon@flatzy.in' || cleanId === 'admin@flatzy.in';
-  const isSuperAdminPassword = password === 'dududon' || password === 'flatzy2026' || password === 'admin123';
+  const isSuperAdminPassword = cleanPassword === 'dududon' || cleanPassword === 'flatzy2026';
 
   if (isSuperAdminId) {
     if (isSuperAdminPassword) {
@@ -63,40 +79,68 @@ export const signInWithEmail = async (email, password, portalType = null) => {
       saveCurrentUser(adminUser);
       return { success: true, user: adminUser };
     } else {
-      return { success: false, error: 'Incorrect password for Super Admin minudon.' };
+      return { success: false, error: 'Incorrect password for Super Admin.' };
     }
   }
 
-  // Broker phone or demo login fallback
-  const isBrokerLogin = cleanId === 'broker@flatzy.in' || cleanId === '9830123456' || cleanId === '9876543210' || cleanId === '9831987654' || cleanId === '9123456789' || /^\d{10}$/.test(cleanId);
-  if (isBrokerLogin && (password === 'flatzy2026' || password === 'dududon' || password === 'broker123' || password.length >= 4)) {
-    const localBrokers = getLocalBrokers();
-    const matched = localBrokers.find(b => b.phone === cleanId || cleanId === 'broker@flatzy.in') || DEFAULT_BROKER_USER;
-    const brokerUser = {
-      id: matched.id || 'broker-demo-1',
-      email: matched.phone || cleanId,
-      role: 'broker',
-      name: matched.name,
-      agencyName: matched.agencyName || 'Independent Real Estate',
-      phone: matched.phone || cleanId
-    };
-    saveCurrentUser(brokerUser);
-    return { success: true, user: brokerUser };
+  // 2. Broker: Vaastu Nivas (ID: vaastu / vastunivas / vaastunivas / nivas, password: vaastu / vastu / nivas)
+  const isVaastuNiwasId = cleanId === 'vaastu' ||
+                          cleanId === 'vastu' ||
+                          cleanId === 'nivas' ||
+                          cleanId === 'niwas' ||
+                          cleanId === 'vaastunivas' || 
+                          cleanId === 'vastunivas' || 
+                          cleanId === 'vaastuniwas' || 
+                          cleanId === 'vastuniwas' || 
+                          cleanId === 'vaastu nivas' || 
+                          cleanId === 'vastu nivas' || 
+                          cleanId === 'vaastu niwas' || 
+                          cleanId === 'vastu niwas' || 
+                          cleanId === 'vaastu-nivas' || 
+                          cleanId === 'vastu-nivas' || 
+                          cleanId === 'vaastunivas@flatzy.in' ||
+                          cleanId === 'vastunivas@flatzy.in' ||
+                          cleanId === 'vaastuniwas@flatzy.in' ||
+                          cleanId === 'vastuniwas@flatzy.in';
+
+  if (isVaastuNiwasId) {
+    const isVaastuPassword = cleanPassword === 'vaastu' || 
+                             cleanPassword === 'vastu' ||
+                             cleanPassword === 'nivas' ||
+                             cleanPassword === 'niwas';
+
+    if (isVaastuPassword) {
+      const brokerUser = { ...VASTU_NIWAS_BROKER_USER };
+      saveCurrentUser(brokerUser);
+      return { success: true, user: brokerUser };
+    } else {
+      return { success: false, error: 'Incorrect password for Vaastu Nivas.' };
+    }
   }
 
+  // 3. Registered phone brokers
+  const localBrokers = getLocalBrokers();
+  const matched = localBrokers.find(b => b.phone === cleanId || cleanId === 'broker@flatzy.in');
+  if (matched) {
+    if (cleanPassword === 'vaastu' || cleanPassword === 'vastu' || cleanPassword === 'dududon') {
+      const brokerUser = {
+        id: matched.id || 'broker-vastu-niwas',
+        email: matched.phone || cleanId,
+        role: 'broker',
+        name: matched.name,
+        agencyName: matched.agencyName || 'Vaastu Niwas',
+        phone: matched.phone || cleanId
+      };
+      saveCurrentUser(brokerUser);
+      return { success: true, user: brokerUser };
+    } else {
+      return { success: false, error: 'Incorrect password for broker account.' };
+    }
+  }
+
+  // 4. Supabase fallback if configured
   if (!isSupabaseConfigured || !supabase) {
-    // Local demo login fallback
-    const role = cleanId.includes('admin') ? 'admin' : 'broker';
-    const fallbackUser = {
-      id: `user-${Date.now()}`,
-      email: cleanId,
-      role,
-      name: role === 'admin' ? 'Flatzy Admin' : 'Broker Partner',
-      agencyName: role === 'broker' ? 'Local Agency' : 'Flatzy Kolkata',
-      phone: ''
-    };
-    saveCurrentUser(fallbackUser);
-    return { success: true, user: fallbackUser };
+    return { success: false, error: 'Invalid ID or Password. Access denied.' };
   }
 
   try {
