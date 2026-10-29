@@ -53,7 +53,9 @@ import {
   createRoommateInCloud,
   updateRoommateInCloud,
   deleteRoommateFromCloud,
-  getLocalRoommates
+  getLocalRoommates,
+  saveLocalRoommates,
+  mapCloudRoommate
 } from './services/roommateAdminService';
 import {
   fetchProperties,
@@ -365,17 +367,28 @@ export default function App() {
 
   const handleAddRoommate = async (newProfile) => {
     setRoommates(prev => [newProfile, ...prev]);
-    await createRoommateInCloud(supabase, newProfile);
+    const res = await createRoommateInCloud(supabase, newProfile);
+    if (res?.error) {
+      showToast(`⚠️ Supabase notice: ${res.error}`);
+    } else {
+      showToast(`☁️ Roommate synced to cloud database!`);
+    }
   };
 
   const handleUpdateRoommate = async (updatedProfile) => {
     setRoommates(prev => prev.map(p => p.id === updatedProfile.id ? updatedProfile : p));
-    await updateRoommateInCloud(supabase, updatedProfile);
+    const res = await updateRoommateInCloud(supabase, updatedProfile);
+    if (res?.error) {
+      showToast(`⚠️ Cloud update warning: ${res.error}`);
+    }
   };
 
   const handleDeleteRoommate = async (id) => {
     setRoommates(prev => prev.filter(p => p.id !== id));
-    await deleteRoommateFromCloud(supabase, id);
+    const res = await deleteRoommateFromCloud(supabase, id);
+    if (res?.error) {
+      showToast(`⚠️ Cloud delete warning: ${res.error}`);
+    }
   };
 
   const handleToggleVerifyRoommate = async (id, isVerified) => {
@@ -629,14 +642,29 @@ export default function App() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'roommates' }, (payload) => {
         if (payload.eventType === 'INSERT') {
-          const row = payload.new;
-          setRoommates(prev => [row, ...prev.filter(r => r.id !== row.id)]);
+          const mappedRow = mapCloudRoommate(payload.new);
+          setRoommates(prev => {
+            const updated = [mappedRow, ...prev.filter(r => r.id !== mappedRow.id)];
+            saveLocalRoommates(updated);
+            return updated;
+          });
+          showToast(`✨ New flatmate profile uploaded: ${mappedRow.name}`);
         } else if (payload.eventType === 'UPDATE') {
-          const row = payload.new;
-          setRoommates(prev => prev.map(r => r.id === row.id ? { ...r, ...row } : r));
+          const mappedRow = mapCloudRoommate(payload.new);
+          setRoommates(prev => {
+            const updated = prev.map(r => r.id === mappedRow.id ? { ...r, ...mappedRow } : r);
+            saveLocalRoommates(updated);
+            return updated;
+          });
         } else if (payload.eventType === 'DELETE') {
-          const oldRow = payload.old;
-          setRoommates(prev => prev.filter(r => r.id !== oldRow.id));
+          const oldId = payload.old?.id;
+          if (oldId) {
+            setRoommates(prev => {
+              const updated = prev.filter(r => r.id !== oldId);
+              saveLocalRoommates(updated);
+              return updated;
+            });
+          }
         }
       })
       .subscribe((status) => {
@@ -2220,6 +2248,8 @@ export default function App() {
               isDark={isDark}
               openAddModal={openSectionAddModal}
               onCloseAddModal={() => setOpenSectionAddModal(false)}
+              onSync={() => fetchSupabaseLeads(true)}
+              isSyncing={isSyncing}
             />
           </div>
         ) : mainSection === 'properties' ? (

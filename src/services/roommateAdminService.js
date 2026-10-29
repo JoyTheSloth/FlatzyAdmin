@@ -47,6 +47,69 @@ export const saveLocalRoommates = (profiles) => {
   }
 };
 
+/**
+ * Universal mapper to normalize cloud/database rows or realtime payloads
+ * into the camelCase model used by FlatzyAdmin UI components.
+ */
+export const mapCloudRoommate = (row = {}) => {
+  const aboutMeText = row.about_me || row.aboutMe || '';
+  const isTeamUp =
+    row.listing_type === 'Team-Up' ||
+    row.listingType === 'Team-Up' ||
+    aboutMeText.toLowerCase().includes('team up') ||
+    aboutMeText.toLowerCase().includes('team-up') ||
+    aboutMeText.toLowerCase().includes('teamup');
+
+  // Locations normalization (handles array, postgres string "{New Town}", or comma-separated)
+  let locations = ['New Town'];
+  const rawLocs = row.preferred_locations || row.preferredLocations || row.locations || row.location;
+  if (Array.isArray(rawLocs) && rawLocs.length > 0) {
+    locations = rawLocs.filter(Boolean);
+  } else if (typeof rawLocs === 'string' && rawLocs.trim()) {
+    locations = rawLocs.replace(/[{}"']/g, '').split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  // Lifestyle habits normalization
+  const rawHabits = row.lifestyle_habits || row.lifestyleHabits;
+  const habits = typeof rawHabits === 'object' && rawHabits !== null && !Array.isArray(rawHabits) ? {
+    diet: rawHabits.diet || 'Vegetarian',
+    smoking: rawHabits.smoking || 'Non-Smoker',
+    drinking: rawHabits.drinking || 'Non-Drinker',
+    pets: rawHabits.pets || 'Pet Friendly',
+    sleepSchedule: rawHabits.sleepSchedule || rawHabits.sleep_schedule || 'Flexible'
+  } : {
+    diet: 'Vegetarian',
+    smoking: 'Non-Smoker',
+    drinking: 'Non-Drinker',
+    pets: 'Pet Friendly',
+    sleepSchedule: 'Flexible'
+  };
+
+  return {
+    id: String(row.id || `roommate_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`),
+    name: row.name || 'Anonymous',
+    age: Number(row.age) || 24,
+    gender: row.gender || 'Male',
+    avatarId: row.avatar_id || row.avatarId || 'avatar-tech-bro',
+    profession: row.profession || 'Working Professional',
+    occupationTitle: row.occupation_title || row.occupationTitle || row.occupation || '',
+    religion: row.religion || 'Open to All',
+    lookingForBhk: row.looking_for_bhk || row.lookingForBhk || row.bhk || '2 BHK',
+    listingType: row.listing_type || row.listingType || (isTeamUp ? 'Team-Up' : 'Room in Flat'),
+    budgetPerMonth: Number(row.budget_per_month || row.budgetPerMonth || row.budget) || 8000,
+    preferredLocations: locations.length > 0 ? locations : ['New Town'],
+    moveInDate: row.move_in_date || row.moveInDate || row.shifting_date || 'Immediate',
+    isVerified: row.is_approved !== undefined
+      ? Boolean(row.is_approved)
+      : (row.is_verified !== undefined ? Boolean(row.is_verified) : (row.isVerified ?? true)),
+    status: row.status || 'active',
+    lifestyleHabits: habits,
+    aboutMe: aboutMeText,
+    contactWhatsApp: row.contact_whatsapp || row.contactWhatsApp || row.phone || row.whatsapp || '',
+    createdAt: row.created_at || row.createdAt || new Date().toISOString()
+  };
+};
+
 export const fetchRoommatesFromCloud = async (supabase) => {
   const localList = getLocalRoommates();
   if (!supabase) {
@@ -54,7 +117,7 @@ export const fetchRoommatesFromCloud = async (supabase) => {
   }
 
   try {
-    // 1. Fetch from 'roommates' table
+    // Fetch from 'roommates' table
     const { data: cloudRoommates, error } = await supabase
       .from('roommates')
       .select('*')
@@ -65,44 +128,23 @@ export const fetchRoommatesFromCloud = async (supabase) => {
       return { data: localList, fromCloud: false, error: error.message };
     }
 
-    if (Array.isArray(cloudRoommates) && cloudRoommates.length > 0) {
-      const mapped = cloudRoommates.map(row => ({
-        id: row.id,
-        name: row.name || 'Anonymous',
-        age: row.age || 24,
-        gender: row.gender || 'Male',
-        avatarId: row.avatar_id || 'avatar-tech-bro',
-        profession: row.profession || 'Working Professional',
-        occupationTitle: row.occupation_title || '',
-        religion: row.religion || 'Open to All',
-        lookingForBhk: row.looking_for_bhk || '2 BHK',
-        listingType: row.listing_type || (row.about_me?.toLowerCase().includes('team up') || row.about_me?.toLowerCase().includes('team-up') ? 'Team-Up' : 'Room in Flat'),
-        budgetPerMonth: Number(row.budget_per_month) || 8000,
-        preferredLocations: Array.isArray(row.preferred_locations)
-          ? row.preferred_locations
-          : (typeof row.preferred_locations === 'string' ? row.preferred_locations.replace(/[{}]/g, '').split(',').map(s => s.trim()) : ['New Town']),
-        moveInDate: row.move_in_date || 'Immediate',
-        isVerified: row.is_approved !== undefined ? Boolean(row.is_approved) : (row.is_verified ?? true),
-        status: row.status || 'active',
-        lifestyleHabits: typeof row.lifestyle_habits === 'object' && row.lifestyle_habits !== null ? row.lifestyle_habits : {
-          diet: 'Vegetarian',
-          smoking: 'Non-Smoker',
-          drinking: 'Non-Drinker',
-          pets: 'Pet Friendly',
-          sleepSchedule: 'Flexible'
-        },
-        aboutMe: row.about_me || '',
-        contactWhatsApp: row.contact_whatsapp || '',
-        createdAt: row.created_at || new Date().toISOString()
-      }));
-
-      // Combine with initial seeds if any aren't present (excluding deleted ones)
+    if (Array.isArray(cloudRoommates)) {
+      const mapped = cloudRoommates.map(mapCloudRoommate);
       const deletedIds = new Set(getDeletedRoommateIds());
       const cloudFiltered = mapped.filter(m => !deletedIds.has(m.id));
       const cloudIds = new Set(cloudFiltered.map(m => m.id));
-      const initialRemaining = INITIAL_ROOMMATES.filter(init => !cloudIds.has(init.id) && !deletedIds.has(init.id));
-      const combined = [...cloudFiltered, ...initialRemaining];
 
+      // Preserve any locally uploaded/created roommates not yet present in the cloud query
+      const unsyncedLocals = localList.filter(lp => !cloudIds.has(lp.id) && !deletedIds.has(lp.id));
+
+      // Seed fallbacks only if they are not in cloud, not locally staged, and not deleted
+      const initialRemaining = INITIAL_ROOMMATES.filter(init => 
+        !cloudIds.has(init.id) && 
+        !deletedIds.has(init.id) && 
+        !unsyncedLocals.some(u => u.id === init.id)
+      );
+
+      const combined = [...unsyncedLocals, ...cloudFiltered, ...initialRemaining];
       saveLocalRoommates(combined);
       return { data: combined, fromCloud: true };
     }
@@ -115,75 +157,83 @@ export const fetchRoommatesFromCloud = async (supabase) => {
 };
 
 export const createRoommateInCloud = async (supabase, profile) => {
-  // Always update local cache immediately
+  const normalized = mapCloudRoommate(profile);
+
+  // Always update local cache immediately so UI feels instantaneous
   const local = getLocalRoommates();
-  const updated = [profile, ...local.filter(p => p.id !== profile.id)];
+  const updated = [normalized, ...local.filter(p => p.id !== normalized.id)];
   saveLocalRoommates(updated);
 
-  if (!supabase) return { success: true, localOnly: true };
+  if (!supabase) return { success: true, localOnly: true, data: normalized };
 
   try {
+    // Guarantees all NOT-NULL columns in Supabase table have safe defaults
     const payload = {
-      id: profile.id,
-      name: profile.name,
-      age: profile.age,
-      gender: profile.gender,
-      avatar_id: profile.avatarId,
-      profession: profile.profession,
-      occupation_title: profile.occupationTitle,
-      religion: profile.religion || 'Open to All',
-      looking_for_bhk: profile.lookingForBhk,
-      budget_per_month: profile.budgetPerMonth,
-      preferred_locations: profile.preferredLocations,
-      move_in_date: profile.moveInDate,
-      lifestyle_habits: profile.lifestyleHabits,
-      about_me: profile.listingType === 'Team-Up' && !profile.aboutMe.toLowerCase().includes('team')
-        ? `[Team-Up] ${profile.aboutMe}`
-        : profile.aboutMe,
-      contact_whatsapp: profile.contactWhatsApp,
-      is_approved: profile.isVerified ?? true,
-      created_at: profile.createdAt || new Date().toISOString(),
+      id: normalized.id,
+      name: normalized.name || 'Flatmate Seeker',
+      age: Number(normalized.age) || 24,
+      gender: normalized.gender || 'Male',
+      avatar_id: normalized.avatarId || 'avatar-tech-bro',
+      profession: normalized.profession || 'Working Professional',
+      occupation_title: normalized.occupationTitle || '',
+      religion: normalized.religion || 'Open to All',
+      looking_for_bhk: normalized.lookingForBhk || '2 BHK',
+      budget_per_month: Number(normalized.budgetPerMonth) || 8000,
+      preferred_locations: Array.isArray(normalized.preferredLocations) && normalized.preferredLocations.length > 0
+        ? normalized.preferredLocations
+        : ['New Town'],
+      move_in_date: normalized.moveInDate || 'Immediate',
+      lifestyle_habits: normalized.lifestyleHabits || {},
+      about_me: normalized.listingType === 'Team-Up' && !normalized.aboutMe.toLowerCase().includes('team')
+        ? `[Team-Up] ${normalized.aboutMe}`
+        : normalized.aboutMe,
+      contact_whatsapp: normalized.contactWhatsApp || '919830000000',
+      is_approved: normalized.isVerified ?? true,
+      created_at: normalized.createdAt || new Date().toISOString()
     };
 
     const { error } = await supabase.from('roommates').insert([payload]);
     if (error) {
       console.warn('[RoommateAdminService] Supabase insert warning:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, data: normalized };
     }
-    return { success: true };
+    return { success: true, data: normalized };
   } catch (err) {
     console.error('[RoommateAdminService] Create exception:', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, data: normalized };
   }
 };
 
 export const updateRoommateInCloud = async (supabase, profile) => {
+  const normalized = mapCloudRoommate(profile);
   const local = getLocalRoommates();
-  const updated = local.map(p => p.id === profile.id ? profile : p);
+  const updated = local.map(p => p.id === normalized.id ? normalized : p);
   saveLocalRoommates(updated);
 
-  if (!supabase) return { success: true, localOnly: true };
+  if (!supabase) return { success: true, localOnly: true, data: normalized };
 
   try {
     const payload = {
-      name: profile.name,
-      age: profile.age,
-      gender: profile.gender,
-      avatar_id: profile.avatarId,
-      profession: profile.profession,
-      occupation_title: profile.occupationTitle,
-      religion: profile.religion || 'Open to All',
-      looking_for_bhk: profile.lookingForBhk,
-      budget_per_month: profile.budgetPerMonth,
-      preferred_locations: profile.preferredLocations,
-      move_in_date: profile.moveInDate,
-      lifestyle_habits: profile.lifestyleHabits,
-      about_me: profile.aboutMe,
-      contact_whatsapp: profile.contactWhatsApp,
-      is_approved: profile.isVerified ?? true
+      name: normalized.name || 'Flatmate Seeker',
+      age: Number(normalized.age) || 24,
+      gender: normalized.gender || 'Male',
+      avatar_id: normalized.avatarId || 'avatar-tech-bro',
+      profession: normalized.profession || 'Working Professional',
+      occupation_title: normalized.occupationTitle || '',
+      religion: normalized.religion || 'Open to All',
+      looking_for_bhk: normalized.lookingForBhk || '2 BHK',
+      budget_per_month: Number(normalized.budgetPerMonth) || 8000,
+      preferred_locations: Array.isArray(normalized.preferredLocations) && normalized.preferredLocations.length > 0
+        ? normalized.preferredLocations
+        : ['New Town'],
+      move_in_date: normalized.moveInDate || 'Immediate',
+      lifestyle_habits: normalized.lifestyleHabits || {},
+      about_me: normalized.aboutMe || '',
+      contact_whatsapp: normalized.contactWhatsApp || '919830000000',
+      is_approved: normalized.isVerified ?? true
     };
 
-    const { error } = await supabase.from('roommates').update(payload).eq('id', profile.id);
+    const { error } = await supabase.from('roommates').update(payload).eq('id', normalized.id);
     if (error) {
       console.warn('[RoommateAdminService] Supabase update warning:', error);
       return { success: false, error: error.message };

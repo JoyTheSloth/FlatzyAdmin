@@ -80,3 +80,57 @@ create policy "Allow all public operations on properties"
 alter publication supabase_realtime add table properties;
 
 
+-- 3. Create the roommates / flatmates table (Syncs Flatmates Section & Public Submissions)
+create table if not exists roommates (
+  id text primary key,
+  name text not null,
+  age integer default 24,
+  gender text default 'Male',
+  avatar_id text default 'avatar-tech-bro',
+  profession text default 'Working Professional',
+  occupation_title text default '',
+  religion text default 'Open to All',
+  looking_for_bhk text default '2 BHK',
+  listing_type text default 'Room in Flat',
+  budget_per_month numeric default 8000,
+  preferred_locations text[] default '{"New Town"}',
+  move_in_date text default 'Immediate',
+  lifestyle_habits jsonb default '{"diet": "Vegetarian", "smoking": "Non-Smoker", "drinking": "Non-Drinker", "pets": "Pet Friendly", "sleepSchedule": "Flexible"}'::jsonb,
+  about_me text default '',
+  contact_whatsapp text not null default '919830000000',
+  is_approved boolean default true,
+  status text default 'active',
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- Ensure existing columns have safe defaults and non-blocking nullability
+alter table roommates add column if not exists listing_type text default 'Room in Flat';
+alter table roommates add column if not exists status text default 'active';
+alter table roommates alter column age drop not null;
+alter table roommates alter column age set default 24;
+alter table roommates alter column gender set default 'Male';
+alter table roommates alter column avatar_id drop not null;
+alter table roommates alter column avatar_id set default 'avatar-tech-bro';
+alter table roommates alter column profession drop not null;
+alter table roommates alter column profession set default 'Working Professional';
+alter table roommates alter column looking_for_bhk drop not null;
+alter table roommates alter column looking_for_bhk set default '2 BHK';
+alter table roommates alter column budget_per_month drop not null;
+alter table roommates alter column budget_per_month set default 8000;
+alter table roommates alter column move_in_date drop not null;
+alter table roommates alter column move_in_date set default 'Immediate';
+
+-- Enable RLS for roommates
+alter table roommates enable row level security;
+drop policy if exists "Allow all public operations on roommates" on roommates;
+create policy "Allow all public operations on roommates"
+  on roommates
+  for all
+  using (true)
+  with check (true);
+
+-- Enable Realtime Replication for roommates so multi-device/client sync works instantly
+alter publication supabase_realtime add table roommates;
+
+
+

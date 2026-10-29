@@ -18,7 +18,8 @@ import {
   HeartHandshake,
   Home,
   Briefcase,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { KOLKATA_ROOMMATE_LOCALITIES, LIFESTYLE_OPTIONS, AVATAR_OPTIONS } from '../data/roommatesData';
 import { matchesSearchQuery } from '../utils/searchUtils';
@@ -33,7 +34,9 @@ export default function RoommatesTab({
   showToast,
   isDark,
   openAddModal = false,
-  onCloseAddModal
+  onCloseAddModal,
+  onSync,
+  isSyncing = false
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Room in Flat', 'Team-Up'
@@ -107,11 +110,19 @@ export default function RoommatesTab({
       // Type filter
       if (typeFilter !== 'All' && item.listingType !== typeFilter) return false;
 
-      // Gender filter
-      if (genderFilter !== 'All' && item.gender !== genderFilter) return false;
+      // Gender filter (flexible case)
+      if (genderFilter !== 'All' && item.gender?.toLowerCase() !== genderFilter.toLowerCase()) return false;
 
-      // BHK filter
-      if (bhkFilter !== 'All' && item.lookingForBhk !== bhkFilter) return false;
+      // BHK filter (flexible format matching "2", "2bhk", "2 BHK")
+      if (bhkFilter !== 'All') {
+        const itemBhkNum = String(item.lookingForBhk || '').replace(/[^0-9]/g, '');
+        const filterBhkNum = String(bhkFilter).replace(/[^0-9]/g, '');
+        if (itemBhkNum && filterBhkNum) {
+          if (itemBhkNum !== filterBhkNum) return false;
+        } else if (item.lookingForBhk !== bhkFilter) {
+          return false;
+        }
+      }
 
       // Locality filter
       if (localityFilter !== 'All') {
@@ -416,9 +427,26 @@ export default function RoommatesTab({
 
       {/* RESULTS COUNT & CONTROLS */}
       <div className="px-4 flex items-center justify-between text-xs font-semibold">
-        <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>
-          Showing <strong className={isDark ? 'text-white' : 'text-slate-900 font-extrabold'}>{filteredRoommates.length}</strong> of {totalCount} flatmates
-        </span>
+        <div className="flex items-center space-x-2">
+          <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>
+            Showing <strong className={isDark ? 'text-white' : 'text-slate-900 font-extrabold'}>{filteredRoommates.length}</strong> of {totalCount} flatmates
+          </span>
+          {onSync && (
+            <button
+              onClick={onSync}
+              disabled={isSyncing}
+              title="Sync flatmates from Supabase cloud database"
+              className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                isDark
+                  ? 'bg-purple-950/40 text-purple-300 border-purple-800/60 hover:bg-purple-900/50'
+                  : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+              } ${isSyncing ? 'opacity-60 cursor-not-allowed' : 'active:scale-95'}`}
+            >
+              <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-[#7C3AED]' : ''}`} />
+              <span>{isSyncing ? 'Syncing...' : 'Sync Cloud'}</span>
+            </button>
+          )}
+        </div>
         {statusFilter !== 'All' || typeFilter !== 'All' || genderFilter !== 'All' || bhkFilter !== 'All' || localityFilter !== 'All' || searchQuery ? (
           <button
             onClick={() => {
