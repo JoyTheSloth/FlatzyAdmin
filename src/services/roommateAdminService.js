@@ -3,6 +3,19 @@ import { INITIAL_ROOMMATES } from '../data/roommatesData';
 const LOCAL_STORAGE_KEY = 'flatzy_admin_roommates_v1';
 const DELETED_ROOMMATES_KEY = 'flatzy_deleted_roommates_v1';
 
+const MOCK_ROOMMATE_IDS = new Set([
+  'roommate-1',
+  'roommate-2',
+  'roommate-3',
+  'roommate-4',
+  'roommate-1792956115418',
+  'test_insert_1793285275075',
+  'probe_1793285641299',
+  'verify_1793286079060',
+  'verify_1793286097306',
+  'handshake_test_1793286117943'
+]);
+
 export const getDeletedRoommateIds = () => {
   try {
     const raw = localStorage.getItem(DELETED_ROOMMATES_KEY);
@@ -29,14 +42,18 @@ export const getLocalRoommates = () => {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.filter(p => !deletedIds.has(p.id));
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter(p => !deletedIds.has(p.id) && !MOCK_ROOMMATE_IDS.has(p.id) && p.status !== 'deleted');
+        if (cleaned.length !== parsed.length) {
+          saveLocalRoommates(cleaned);
+        }
+        return cleaned;
       }
     }
   } catch (err) {
     console.warn('[RoommateAdminService] Error reading local storage:', err);
   }
-  return INITIAL_ROOMMATES.filter(p => !deletedIds.has(p.id));
+  return [];
 };
 
 export const saveLocalRoommates = (profiles) => {
@@ -131,20 +148,24 @@ export const fetchRoommatesFromCloud = async (supabase) => {
     if (Array.isArray(cloudRoommates)) {
       const mapped = cloudRoommates.map(mapCloudRoommate);
       const deletedIds = new Set(getDeletedRoommateIds());
-      const cloudFiltered = mapped.filter(m => !deletedIds.has(m.id));
+      const cloudFiltered = mapped.filter(m => 
+        !deletedIds.has(m.id) && 
+        !MOCK_ROOMMATE_IDS.has(m.id) && 
+        m.status !== 'deleted' && 
+        m.name?.toLowerCase() !== 'test' && 
+        m.name?.toLowerCase() !== 'test roommate'
+      );
       const cloudIds = new Set(cloudFiltered.map(m => m.id));
 
       // Preserve any locally uploaded/created roommates not yet present in the cloud query
-      const unsyncedLocals = localList.filter(lp => !cloudIds.has(lp.id) && !deletedIds.has(lp.id));
-
-      // Seed fallbacks only if they are not in cloud, not locally staged, and not deleted
-      const initialRemaining = INITIAL_ROOMMATES.filter(init => 
-        !cloudIds.has(init.id) && 
-        !deletedIds.has(init.id) && 
-        !unsyncedLocals.some(u => u.id === init.id)
+      const unsyncedLocals = localList.filter(lp => 
+        !cloudIds.has(lp.id) && 
+        !deletedIds.has(lp.id) && 
+        !MOCK_ROOMMATE_IDS.has(lp.id) && 
+        lp.status !== 'deleted'
       );
 
-      const combined = [...unsyncedLocals, ...cloudFiltered, ...initialRemaining];
+      const combined = [...unsyncedLocals, ...cloudFiltered];
       saveLocalRoommates(combined);
       return { data: combined, fromCloud: true };
     }
