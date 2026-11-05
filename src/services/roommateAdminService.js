@@ -210,6 +210,7 @@ export const createRoommateInCloud = async (supabase, profile) => {
         : normalized.aboutMe,
       contact_whatsapp: normalized.contactWhatsApp || '919830000000',
       is_approved: normalized.isVerified ?? true,
+      status: normalized.status || 'active',
       created_at: normalized.createdAt || new Date().toISOString()
     };
 
@@ -251,7 +252,8 @@ export const updateRoommateInCloud = async (supabase, profile) => {
       lifestyle_habits: normalized.lifestyleHabits || {},
       about_me: normalized.aboutMe || '',
       contact_whatsapp: normalized.contactWhatsApp || '919830000000',
-      is_approved: normalized.isVerified ?? true
+      is_approved: normalized.isVerified ?? true,
+      status: normalized.status || 'active'
     };
 
     const { error } = await supabase.from('roommates').update(payload).eq('id', normalized.id);
