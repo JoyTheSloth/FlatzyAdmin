@@ -253,6 +253,19 @@ export default function PropertiesTab({
     };
     onUpdateProperty(updated);
     showToast(`🎉 Approved "${prop.title}" — Live on Flatzy website!`);
+
+    // Instant WhatsApp confirmation notification to broker partner
+    if (prop.brokerPhone) {
+      const cleanPhone = prop.brokerPhone.replace(/\D/g, '');
+      const msg = encodeURIComponent(
+        `🎉 *Flatzy Listing Approved & Live!*\n\n` +
+        `Hi ${prop.brokerName || 'Partner'},\n` +
+        `Great news! Your listing for *${prop.title}* has been verified and approved by the Flatzy Admin team.\n\n` +
+        `🚀 *Status:* Live on flatzy.in\n` +
+        `We are already matching prospective client leads for this flat. Thank you for listing with Flatzy!`
+      );
+      window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
+    }
   };
 
   const handleRejectProperty = (prop, e) => {
@@ -260,6 +273,17 @@ export default function PropertiesTab({
     if (window.confirm(`Are you sure you want to reject the listing "${prop.title}"?`)) {
       onDeleteProperty(prop.id);
       showToast(`❌ Rejected listing "${prop.title}"`);
+
+      // WhatsApp update to broker if phone provided
+      if (prop.brokerPhone) {
+        const cleanPhone = prop.brokerPhone.replace(/\D/g, '');
+        const msg = encodeURIComponent(
+          `⚠️ *Flatzy Listing Update*\n\n` +
+          `Hi ${prop.brokerName || 'Partner'},\n` +
+          `Your recent listing for *${prop.title}* could not be approved at this time. Please ensure you upload clear interior photos and accurate location details on @flatzykolkatabot, or reach out to our team.`
+        );
+        window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
+      }
     }
   };
 
