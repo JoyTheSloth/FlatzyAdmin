@@ -197,7 +197,12 @@ export default function PropertiesTab({
       if (locationFilter !== 'All' && prop.location !== locationFilter) return false;
 
       // Status filter
-      if (statusFilter !== 'all' && (prop.status || 'available') !== statusFilter) return false;
+      if (statusFilter === 'pending') {
+        const isPending = (prop.status === 'pending' || prop.status === 'pending_approval' || prop.isVerified === false);
+        if (!isPending) return false;
+      } else if (statusFilter !== 'all' && (prop.status || 'available') !== statusFilter) {
+        return false;
+      }
 
       // Furnishing filter
       if (furnishingFilter !== 'all' && prop.furnishing !== furnishingFilter) return false;
@@ -236,6 +241,27 @@ export default function PropertiesTab({
   const rentCount = properties.filter(p => p.listingType === 'rent').length;
   const saleCount = properties.filter(p => p.listingType === 'sale').length;
   const availableCount = properties.filter(p => (p.status || 'available') === 'available').length;
+  const pendingCount = properties.filter(p => p.status === 'pending' || p.status === 'pending_approval' || p.isVerified === false).length;
+
+  // Approve / Reject for Telegram & Community Submissions
+  const handleApproveProperty = (prop, e) => {
+    if (e) e.stopPropagation();
+    const updated = {
+      ...prop,
+      status: 'available',
+      isVerified: true
+    };
+    onUpdateProperty(updated);
+    showToast(`🎉 Approved "${prop.title}" — Live on Flatzy website!`);
+  };
+
+  const handleRejectProperty = (prop, e) => {
+    if (e) e.stopPropagation();
+    if (window.confirm(`Are you sure you want to reject the listing "${prop.title}"?`)) {
+      onDeleteProperty(prop.id);
+      showToast(`❌ Rejected listing "${prop.title}"`);
+    }
+  };
 
   // =========================================================================
   // WHATSAPP PITCH & BROCHURE GENERATION
@@ -420,6 +446,42 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
 
   return (
     <div className="space-y-4">
+      {/* ======================================================== */}
+      {/* PENDING APPROVAL QUEUE BANNER (Telegram / Community)    */}
+      {/* ======================================================== */}
+      {pendingCount > 0 && (
+        <section aria-label="Pending Approvals" className="px-4">
+          <div className="rounded-2xl p-4 bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-amber-500/20 border-2 border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-900 flex items-center justify-center font-black shadow-sm shrink-0 text-xl">
+                🔔
+              </div>
+              <div>
+                <h4 className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>{pendingCount} Flat Submission{pendingCount > 1 ? 's' : ''} Pending Approval</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-900 uppercase">
+                    From Telegram Bot
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                  Review property photos and details below. Once approved, the flat goes live on the Flatzy website immediately.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setStatusFilter('pending');
+                setShowAdvancedFilters(true);
+              }}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-900 font-black text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <span>Review {pendingCount} Pending Flat{pendingCount > 1 ? 's' : ''}</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* ======================================================== */}
       {/* 4 HIGH-IMPACT OPERATIONAL METRIC TILES */}
       {/* ======================================================== */}
@@ -606,6 +668,7 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
               <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar">
                 {[
                   { id: 'all', label: 'All Statuses' },
+                  { id: 'pending', label: `⏳ Pending Review ${pendingCount > 0 ? `(${pendingCount})` : ''}` },
                   { id: 'available', label: '🟢 Available Only' },
                   { id: 'reserved', label: '🟡 Reserved' },
                   { id: 'rented', label: '🔴 Rented Out' },
@@ -786,7 +849,12 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
 
                     {/* Interactive 1-Tap Quick Status Switcher */}
                     <div className="mt-1 flex items-center justify-end space-x-1">
-                      {currentStatus === 'available' ? (
+                      {currentStatus === 'pending' || !prop.isVerified ? (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 flex items-center space-x-1 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                          <span>PENDING REVIEW</span>
+                        </span>
+                      ) : currentStatus === 'available' ? (
                         <button
                           onClick={(e) => handleQuickStatusChange(prop, 'reserved', e)}
                           title="Click to mark as Reserved"
@@ -817,6 +885,39 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
                     </div>
                   </div>
                 </div>
+
+                {/* TELEGRAM / COMMUNITY SUBMISSION PENDING APPROVAL BAR */}
+                {(currentStatus === 'pending' || currentStatus === 'pending_approval' || !prop.isVerified) && (
+                  <div className="mt-2.5 p-3 rounded-2xl bg-gradient-to-r from-amber-500/25 via-orange-500/15 to-amber-500/20 border-2 border-amber-500/40 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-amber-950 dark:text-amber-200">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                        <span>Telegram Bot Submission</span>
+                      </span>
+                      <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-md bg-amber-500/30 text-amber-900 dark:text-amber-200">
+                        Needs Approval
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        onClick={(e) => handleApproveProperty(prop, e)}
+                        className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                        title="Approve and publish live on Flatzy website immediately"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Approve &amp; Publish</span>
+                      </button>
+                      <button
+                        onClick={(e) => handleRejectProperty(prop, e)}
+                        className="py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                        title="Reject this submission"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Reject</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* ======================================================== */}
                 {/* MATCHING TENANT LEADS ALERT BANNER (High Utility!) */}

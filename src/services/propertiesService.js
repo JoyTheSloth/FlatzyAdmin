@@ -101,7 +101,7 @@ export const fetchProperties = async (supabaseClient, brokerIdFilter = null) => 
         furnishing: row.furnishing || 'Semi Furnished',
         amenities: Array.isArray(row.amenities) ? row.amenities : [],
         status: row.status || 'available',
-        isVerified: row.is_verified ?? true,
+        isVerified: row.is_verified ?? (row.status !== 'pending' && row.status !== 'pending_approval'),
         images: Array.isArray(row.images) ? row.images.slice(0, 6) : [],
         description: row.description || '',
         createdAt: row.created_at || new Date().toISOString()
@@ -196,6 +196,7 @@ export const updateProperty = async (supabaseClient, property) => {
       furnishing: property.furnishing,
       amenities: property.amenities || [],
       status: property.status,
+      is_verified: property.isVerified ?? (property.status === 'available'),
       images: (property.images || []).filter(Boolean).slice(0, 6),
       description: property.description
     };
