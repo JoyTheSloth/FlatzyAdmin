@@ -616,9 +616,34 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
 
         {/* Primary Filter Row: Type + BHK */}
         <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs font-bold">
-          {/* Rent/Sale Tabs */}
+          {/* Status Tabs: All, Pending Review, Approved/Live */}
           {[
             { id: 'all', label: `All (${totalCount})` },
+            { id: 'pending', label: `⏳ Pending Review (${pendingCount})`, badgeColor: pendingCount > 0 ? 'bg-amber-500 text-slate-900 animate-pulse' : '' },
+            { id: 'available', label: `✅ Approved & Live (${availableCount})` }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-xl transition-all border whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === tab.id
+                  ? tab.id === 'pending'
+                    ? 'bg-amber-500 text-slate-950 font-black border-amber-500 shadow-xs'
+                    : 'bg-emerald-600 text-white font-black border-emerald-600 shadow-xs'
+                  : isDark
+                    ? 'bg-slate-800/80 text-slate-300 border-slate-700 hover:border-slate-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 shadow-xs'
+              }`}
+            >
+              <span>{tab.label}</span>
+            </button>
+          ))}
+
+          <span className="text-slate-400">|</span>
+
+          {/* Rent/Sale Tabs */}
+          {[
+            { id: 'all', label: 'All Types' },
             { id: 'rent', label: `Rent (${rentCount})` },
             { id: 'sale', label: `Sale (${saleCount})` }
           ].map(tab => (
