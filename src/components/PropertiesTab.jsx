@@ -36,6 +36,7 @@ import { matchesSearchQuery } from '../utils/searchUtils';
 import CloudinaryImageUploader from './CloudinaryImageUploader';
 import AiPropertyQuickBox from './AiPropertyQuickBox';
 import { getPropertyTimestamp } from '../utils/dateUtils';
+import { generateAIPitches } from '../services/aiPitchGenerator';
 
 export const COMMON_AMENITIES = [
   'Lift',
@@ -86,6 +87,7 @@ export default function PropertiesTab({
   const [selectedFlatForLeads, setSelectedFlatForLeads] = useState(null); // Flat opened in "Matching Leads" modal
   const [lightboxData, setLightboxData] = useState(null); // { images: [], activeIndex: 0, title: '' }
   const [copiedPitchId, setCopiedPitchId] = useState(null);
+  const [aiPitchModal, setAiPitchModal] = useState(null); // { prop, pitches: null, loading: false, activeTab: 'whatsapp' }
 
   const todayFormatted = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -315,6 +317,24 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 📞 *Direct Partner:* ${prop.brokerPhone || '+91 89103 76054'} (${prop.brokerName || 'Flatzy Verified'})
 🌐 *Schedule a Visit with Flatzy Kolkata*`;
+  };
+
+  const handleOpenAiPitches = async (prop, e) => {
+    if (e) e.stopPropagation();
+    setAiPitchModal({ prop, pitches: null, loading: true, activeTab: 'whatsapp' });
+
+    try {
+      const pitches = await generateAIPitches(prop);
+      setAiPitchModal({ prop, pitches, loading: false, activeTab: 'whatsapp' });
+    } catch (err) {
+      showToast('⚠️ Could not generate AI pitches. Check connection.');
+      setAiPitchModal(null);
+    }
+  };
+
+  const handleCopyAiPitchText = (text) => {
+    navigator.clipboard.writeText(text);
+    showToast('📋 Copied AI Pitch to clipboard!');
   };
 
   const handleCopyPitch = (prop, e) => {
@@ -1095,6 +1115,16 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
 
                   {/* Operational Action Buttons */}
                   <div className="flex items-center space-x-1.5 ml-auto">
+                    {/* AI Smart Pitches (Groq) */}
+                    <button
+                      onClick={(e) => handleOpenAiPitches(prop, e)}
+                      className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] font-black flex items-center space-x-1 shadow-xs transition-all active:scale-95 cursor-pointer"
+                      title="Generate 3 High-Converting AI Marketing Pitches (WhatsApp, Investor, Family)"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-300" />
+                      <span>AI Pitch</span>
+                    </button>
+
                     {/* Share on WhatsApp */}
                     <button
                       onClick={(e) => handleShareWhatsApp(prop, e)}
@@ -1953,6 +1983,105 @@ ${prop.description ? `\n📝 *Details:* ${prop.description}\n` : ''}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* AI SMART MARKETING PITCH MODAL */}
+      {/* ======================================================== */}
+      {aiPitchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className={`w-full max-w-xl rounded-3xl p-5 shadow-2xl border ${
+            isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black flex items-center gap-1.5">
+                    <span>AI Marketing Pitch Studio</span>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400">
+                      Groq 70B
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {aiPitchModal.prop.title} • {aiPitchModal.prop.location}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAiPitchModal(null)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {aiPitchModal.loading ? (
+              <div className="py-16 text-center space-y-3">
+                <div className="w-10 h-10 border-3 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                  Writing high-converting pitches with Groq Llama-3.3-70b...
+                </p>
+                <p className="text-xs text-slate-400">Tailoring copy for WhatsApp groups, investors & families</p>
+              </div>
+            ) : aiPitchModal.pitches ? (
+              <div className="mt-4 space-y-3">
+                {/* Tone Tabs */}
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-xs font-bold">
+                  {[
+                    { id: 'whatsapp', label: '🔥 WhatsApp Broadcast' },
+                    { id: 'investor', label: '💼 High-Yield Investor' },
+                    { id: 'family', label: '🏡 Family Living' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setAiPitchModal(prev => ({ ...prev, activeTab: tab.id }))}
+                      className={`flex-1 py-1.5 rounded-lg transition-all text-xs font-black cursor-pointer ${
+                        aiPitchModal.activeTab === tab.id
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Pitch Display Box */}
+                <div className={`p-4 rounded-2xl border text-xs leading-relaxed font-mono whitespace-pre-wrap max-h-[300px] overflow-y-auto ${
+                  isDark ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
+                }`}>
+                  {aiPitchModal.pitches[aiPitchModal.activeTab]}
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-[11px] text-slate-400 font-medium">Ready to share in 1 tap</span>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleCopyAiPitchText(aiPitchModal.pitches[aiPitchModal.activeTab])}
+                      className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold flex items-center space-x-1.5 cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Pitch</span>
+                    </button>
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(aiPitchModal.pitches[aiPitchModal.activeTab])}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center space-x-1.5 shadow-md cursor-pointer"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Broadcast on WhatsApp</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
