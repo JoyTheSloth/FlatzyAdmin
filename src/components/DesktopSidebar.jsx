@@ -71,6 +71,18 @@ export default function DesktopSidebar({
       accentDot: 'bg-blue-500'
     },
     {
+      id: 'weekly-rooms',
+      label: 'Weekly Listed Rooms',
+      sublabel: 'Homepage featured rooms',
+      icon: Sparkles,
+      count: counts.weeklyRooms || 0,
+      activeColor: 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 font-black',
+      inactiveHover: 'hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300',
+      badgeActive: 'bg-white/20 text-white',
+      badgeInactive: 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400',
+      accentDot: 'bg-emerald-500'
+    },
+    {
       id: 'brokers',
       label: 'Partner Brokers',
       sublabel: 'Verified Kolkata brokers',

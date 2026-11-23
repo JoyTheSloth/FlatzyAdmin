@@ -43,6 +43,7 @@ import { parseLeadWithAI } from './services/aiLeadParser';
 import { supabase, isSupabaseConfigured } from './services/supabase';
 import RoommatesTab from './components/RoommatesTab';
 import PropertiesTab from './components/PropertiesTab';
+import WeeklyRoomsTab from './components/WeeklyRoomsTab';
 import BrokersTab from './components/BrokersTab';
 import BrokerDashboard from './components/BrokerDashboard';
 import AuthModal from './components/AuthModal';
@@ -2265,6 +2266,10 @@ export default function App() {
               openAddModal={openSectionAddModal}
               onCloseAddModal={() => setOpenSectionAddModal(false)}
             />
+          </div>
+        ) : mainSection === 'weekly-rooms' ? (
+          <div className="mt-4">
+            <WeeklyRoomsTab isDark={isDark} />
           </div>
         ) : (
           <div className="mt-4">
